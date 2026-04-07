@@ -1,0 +1,49 @@
+version: "1.0"
+record_root: "$.patients[*]"
+
+rules:
+  # Suppress SSN entirely
+  - selector: "$..ssn"
+    technique: suppress
+
+  # Redact name
+  - selector: "$..name"
+    technique: redact
+
+  # Pseudonymise email deterministically
+  - selector: "$..email"
+    technique: pseudonymize
+    consistent: true
+
+  # Generalise date of birth to year
+  - selector: "$..dob"
+    technique: generalize
+    hierarchy: date
+    level: 2
+
+  # Generalise zipcode — mask last 2 digits
+  - selector: "$..zipcode"
+    technique: generalize
+    hierarchy: zipcode
+    level: 2
+
+  # Generalise ICD-10 diagnosis to 3-char category
+  - selector: "$..diagnosis"
+    technique: generalize
+    hierarchy: icd10
+    level: 1
+
+  # Add noise to blood pressure readings
+  - selector: "$..bloodpressure"
+    technique: noise
+
+  # Nullify address
+  - selector: "$..address"
+    technique: nullify
+
+k_anonymity:
+  enabled: true
+  k: 2
+  quasi_identifiers:
+    - "$..dob"
+    - "$..zipcode"

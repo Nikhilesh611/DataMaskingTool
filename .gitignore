@@ -1,0 +1,72 @@
+# ─── Python ───────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.pyd
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+*.egg
+.eggs/
+wheels/
+
+# Unit test / coverage reports
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+*.cover
+*.py,cover
+nosetests.xml
+junit.xml
+
+# Type-checker caches
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pyright/
+.ruff_cache/
+
+# ─── Virtual Environment ───────────────────────────────────────────────────────
+.venv/
+venv/
+env/
+ENV/
+.env.bak
+
+# ─── Secrets & Environment Files ──────────────────────────────────────────────
+# Keep .env.example — never commit real secrets
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+secrets.yaml
+secrets.yml
+
+# ─── Logs & Audit Trails ──────────────────────────────────────────────────────
+*.log
+audit.log
+logs/
+
+# ─── IDE / Editor ─────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+.DS_Store
+Thumbs.db
+
+# ─── OS ───────────────────────────────────────────────────────────────────────
+desktop.ini
+ehthumbs.db
+
+# ─── Project-specific ─────────────────────────────────────────────────────────
+# Keep sample data files, exclude any generated/processed output
+output/
+masked_output/
+pipeline.txt

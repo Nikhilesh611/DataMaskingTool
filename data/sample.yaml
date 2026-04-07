@@ -1,0 +1,28 @@
+patients:
+  - id: P001
+    name: Alice Johnson
+    dob: "1985-07-23"
+    ssn: 123-45-6789
+    zipcode: "10001"
+    diagnosis: J18.9
+    bloodpressure: "120.5"
+    email: alice@example.com
+    address: "123 Main St, New York"
+  - id: P002
+    name: Bob Williams
+    dob: "1972-03-14"
+    ssn: 987-65-4321
+    zipcode: "10002"
+    diagnosis: E11.9
+    bloodpressure: "138.0"
+    email: bob@example.com
+    address: "456 Oak Ave, New York"
+  - id: P003
+    name: Carol Davis
+    dob: "1990-11-05"
+    ssn: 555-12-3456
+    zipcode: "10003"
+    diagnosis: I10
+    bloodpressure: "145.2"
+    email: carol@example.com
+    address: "789 Pine Rd, New York"

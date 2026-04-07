@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<patients>
+  <patient id="P001">
+    <name>Alice Johnson</name>
+    <dob>1985-07-23</dob>
+    <ssn>123-45-6789</ssn>
+    <zipcode>10001</zipcode>
+    <diagnosis>J18.9</diagnosis>
+    <bloodpressure>120.5</bloodpressure>
+    <email>alice@example.com</email>
+    <address>123 Main St, New York</address>
+  </patient>
+  <patient id="P002">
+    <name>Bob Williams</name>
+    <dob>1972-03-14</dob>
+    <ssn>987-65-4321</ssn>
+    <zipcode>10002</zipcode>
+    <diagnosis>E11.9</diagnosis>
+    <bloodpressure>138.0</bloodpressure>
+    <email>bob@example.com</email>
+    <address>456 Oak Ave, New York</address>
+  </patient>
+  <patient id="P003">
+    <name>Carol Davis</name>
+    <dob>1990-11-05</dob>
+    <ssn>555-12-3456</ssn>
+    <zipcode>10003</zipcode>
+    <diagnosis>I10</diagnosis>
+    <bloodpressure>145.2</bloodpressure>
+    <email>carol@example.com</email>
+    <address>789 Pine Rd, New York</address>
+  </patient>
+</patients>
