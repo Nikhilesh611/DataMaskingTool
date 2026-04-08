@@ -152,8 +152,13 @@ def enforce_k_anonymity(
             # No matching generalise rule — pick a default if hierarchy exists.
             qi_levels[i] = 0
 
-    # Locate record nodes using the record_root selector.
-    records = adapter.select(tree, policy.record_root)
+    # Locate record nodes using the record_root selector(s).
+    records = []
+    if isinstance(policy.record_root, str):
+        records = adapter.select(tree, policy.record_root)
+    else:
+        for r_root in policy.record_root:
+            records.extend(adapter.select(tree, r_root))
     if not records:
         return KAnonReport(
             achieved=True,

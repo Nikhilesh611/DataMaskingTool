@@ -1,0 +1,79 @@
+Data Masking API - Project Files Overview
+==========================================
+
+This document provides a detailed explanation of every Python file in the `app/` and `tests/` directories, describing its role in the overall architecture of this data-masking middleware.
+
+---
+### 1. Root Application Files (`app/`)
+---
+- `app/main.py`: The entry point for the FastAPI application. It wires up the API routes, initializes settings/logging, and starts the web server.
+- `app/config.py`: Parses and validates environment variables (like `DATA_DIR` and `POLICY_PATH`) upon startup. Exposes a singleton settings object.
+- `app/auth.py`: Handles Role-Based Access Control (RBAC). It checks HTTP bearer tokens against configured tokens and assigns roles (analyst, auditor, operator).
+- `app/file_reader.py`: Responsible for loading files from disk. Given a filename, it ensures the file lives inside `DATA_DIR` (protecting against path traversal) and returns its raw bytes and file extension.
+- `app/logging_config.py`: Sets up structured application logging and append-only audit logging for recording system events and operator access.
+- `app/middleware.py`: FastAPI middleware components. For example, it injects unique request IDs (`X-Request-ID`) into every cycle to track execution from end to end.
+- `app/exceptions.py`: Defines custom Python `Exception` classes for the project (e.g., `AuditLogWriteError`, `UnknownRoleError`).
+- `app/techniques.py`: Contains standalone functions for all the core masking operations (like `suppress()`, `redact()`, `pseudonymize()`, `noise()`, and `generalize()`). These functions mutate data without knowing whether the source file is XML, JSON, or YAML by interacting via the Adapter interface.
+- `app/__init__.py`: Boilerplate declaring the folder as a Python package.
+
+---
+### 2. Format Adapters (`app/adapters/`)
+---
+- `app/adapters/base.py`: Defines the `FormatAdapter` abstract base class/interface. It outlines the eight fundamental operations (`parse`, `iter_nodes`, `get_identity`, `get_value`, `set_value`, `remove_node`, `is_attached`, `select`, `serialise`) that every concrete adapter must implement.
+- `app/adapters/xml_adapter.py`: Implements the adapter interface for XML files using the `lxml` library and XPath selectors. Elements carry native references.
+- `app/adapters/json_adapter.py`: Implements the adapter interface for JSON files. Uses `jsonpath-ng` for selectors and relies on `NodeWrapper` to track parent/child paths since regular Python dicts lack object identity.
+- `app/adapters/yaml_adapter.py`: Implements the adapter interface for YAML files. Shares almost all logic and node-wrapping with the JSON adapter since `PyYAML` also produces plain Python dicts/lists.
+- `app/adapters/node_wrapper.py`: A utility class specifically for JSON and YAML. It wraps deeply nested dictionaries and lists so the pipeline can keep track of node parentage, key names, and dot-notation paths.
+- `app/adapters/registry.py`: A factory mapping registry. Given a format string ("xml", "json", "yaml"), it instantiates and returns the corresponding correct adapter using the Strategy pattern.
+- `app/adapters/__init__.py`: Boilerplate declaring the folder as a Python package.
+
+---
+### 3. Pipeline Orchestration (`app/pipeline/`)
+---
+- `app/pipeline/runner.py`: The orchestrator that glues the system together. Receives raw file bytes, loads the correct adapter, and pushes the file sequentially through Phase 1, Phase 2, Phase 3, and finally k-anonymity checks, outputting a completely masked file.
+- `app/pipeline/phase1.py`: Extracts matching subsets of data. It iterates over the rules defined in the policy and runs their selectors against the tree, building a `CoverageIndex` of everything matching a rule.
+- `app/pipeline/phase2.py`: The Conflict Resolution phase. If a specific data node matches multiple rules in the policy, this phase decides which rule strictly applies and builds a `DecisionIndex`.
+- `app/pipeline/phase3.py`: The Masking Loop phase. This walks the tree node by node. If the node is sensitive, it calls `techniques.py` to overwrite/delete the value. If the user is an `auditor`, it replaces the value with a tag of what *would* have happened.
+- `app/pipeline/kanon.py`: The k-anonymity engine. After basic masking, it scans the quasi-identifiers (e.g., zip codes, birth dates) to ensure every record clusters with at least `k - 1` other identical records, generalising them further if privacy thresholds aren't met.
+- `app/pipeline/__init__.py`: Boilerplate declaring the folder as a Python package.
+
+---
+### 4. Hierarchies (`app/hierarchies/`)
+---
+- `app/hierarchies/base.py`: Defines the interface for generalisation techniques (used by the `generalize()` function to make specific data broader or less precise).
+- `app/hierarchies/date_hierarchy.py`: Generalises granular dates. For instance, Level 1 might strip the day (leaving Month/Year), and Level 2 might strip the month (leaving just the Year).
+- `app/hierarchies/icd10_hierarchy.py`: Generalises medical ICD-10 diagnosis codes (e.g., cropping trailing digits to group specific disease variants into broader categories).
+- `app/hierarchies/zipcode_hierarchy.py`: Generalises postal/ZIP codes by stripping trailing digits (e.g., `12345` -> `123** -> 12***`) to expand geographic anonymity.
+- `app/hierarchies/__init__.py`: Boilerplate declaring the folder as a Python package.
+
+---
+### 5. Policy Loading (`app/policy/`)
+---
+- `app/policy/models.py`: Pydantic data models representing the YAML policy file format. Maps constraints like `rules:`, `technique:`, `selector:` into strongly-typed Python objects.
+- `app/policy/loader.py`: Reads the declarative YAML policy file from disk and parses it into the `MaskingPolicy` Pydantic models.
+- `app/policy/__init__.py`: Boilerplate declaring the folder as a Python package.
+
+---
+### 6. API Routes (`app/routes/`)
+---
+- `app/routes/mask.py`: Handles the `POST /mask` REST API endpoint. Initiates the pipeline, generates headers (conflict counts, Request IDs), and writes audit logs.
+- `app/routes/audit.py`: Endpoints relating to viewing the conflict resolution logs and historical audit action records.
+- `app/routes/health.py`: Typically handles `GET /health` to signify that the service is running for load-balancers or uptime monitors.
+- `app/routes/policy.py`: Contains endpoints for fetching or validating the active masking YAML policy.
+- `app/routes/__init__.py`: Boilerplate declaring the folder as a Python package.
+
+---
+### 7. Unit and Integration Tests (`tests/`)
+---
+- `tests/conftest.py`: pytest configuration. Contains fixtures used across multiple test modules (like mock API tokens, dummy files, or instantiated FastAPI TestClients).
+- `tests/test_adapters.py`: Tests the parsing, selection, node iteration, and serialization logic of the XML, JSON, and YAML adapters.
+- `tests/test_endpoints.py`: Integration tests mimicking real HTTP requests hitting the `app/main.py` API routes, testing status codes and end-to-end masking behaviors.
+- `tests/test_file_reader.py`: Asserts that `file_reader.py` properly blocks malicious path traversal attempts pointing outside the allowed `DATA_DIR`.
+- `tests/test_hierarchies.py`: Verifies that the date, ZIP code, and ICD-10 generalization logic crops values correctly at various levels.
+- `tests/test_kanon.py`: Specifically tests the k-anonymity clustering algorithms mathematically and verifies the logic fires fallback generalizations when thresholds fail.
+- `tests/test_phase1.py`: Confirms that `phase1.py` successfully builds an accurate index mapping selectors to physical node identifiers.
+- `tests/test_phase2.py`: Confirms that `phase2.py` correctly resolves overlaps when two conflicting rules cover the same data.
+- `tests/test_phase3.py`: Validates the main tree traversal loop. Ensures modifications are faithfully applied, tracking behavior variations between `analyst` and `auditor` roles.
+- `tests/test_policy.py`: Asserts that `loader.py` securely reads and validates policies and that `models.py` rejects invalid YAML schemas.
+- `tests/test_techniques.py`: Unit tests the math and text manipulation logic inside `app/techniques.py` on dummy nodes.
+- `tests/__init__.py`: Standard Python module declaration for the test suite.

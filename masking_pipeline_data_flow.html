@@ -1,0 +1,202 @@
+
+<h2 style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)">XML JSON YAML masking pipeline: 10-stage interactive data flow with transformation detail</h2>
+<style>
+*{box-sizing:border-box}
+.pw{padding:12px 0 20px;font-family:var(--font-sans,sans-serif)}
+.strip{display:flex;align-items:flex-start;gap:0;overflow-x:auto;padding:0 0 10px;scrollbar-width:thin}
+.sbox{flex-shrink:0;width:54px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px;padding:2px 0;transition:opacity .1s}
+.sbox:hover{opacity:.8}
+.snum{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:500;border:1.5px solid;transition:all .12s;flex-shrink:0}
+.slbl{font-size:9px;text-align:center;line-height:1.25;color:var(--color-text-tertiary);max-width:52px}
+.sarr{flex-shrink:0;width:12px;height:32px;display:flex;align-items:center;justify-content:center;color:var(--color-text-tertiary);font-size:11px;padding-bottom:18px}
+.dp{border:1px solid var(--color-border-tertiary);border-radius:10px;overflow:hidden;margin-top:2px}
+.dph{padding:11px 14px 9px;border-bottom:1px solid var(--color-border-tertiary);display:flex;align-items:flex-start;gap:10px}
+.dpbadge{padding:3px 8px;border-radius:20px;font-size:10px;font-weight:500;white-space:nowrap;flex-shrink:0;margin-top:1px}
+.dptitle{font-size:14px;font-weight:500;color:var(--color-text-primary);margin:0 0 2px}
+.dptech{font-size:11px;color:var(--color-text-tertiary);margin:0;font-family:var(--font-mono,monospace)}
+.dpbody{display:grid;grid-template-columns:1fr 1fr;gap:0}
+@media(max-width:500px){.dpbody{grid-template-columns:1fr}}
+.dpcol{padding:11px 14px}
+.dpcol:first-child{border-right:1px solid var(--color-border-tertiary)}
+.ch{font-size:9px;font-weight:500;text-transform:uppercase;letter-spacing:.06em;color:var(--color-text-tertiary);margin:0 0 7px}
+.dlist{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:5px}
+.dli{display:flex;gap:6px;font-size:11px;color:var(--color-text-secondary);line-height:1.45}
+.ddot{width:4px;height:4px;border-radius:50%;margin-top:5px;flex-shrink:0}
+.pre{background:var(--color-background-secondary);border:1px solid var(--color-border-tertiary);border-radius:6px;padding:8px 10px;font-size:10px;font-family:var(--font-mono,monospace);white-space:pre;overflow-x:auto;line-height:1.6;color:var(--color-text-primary);margin:8px 0 0}
+.mbadge{display:inline-block;padding:2px 7px;border-radius:4px;font-size:9px;font-weight:500;margin-bottom:9px}
+.nav{display:flex;align-items:center;justify-content:space-between;padding:8px 0 0}
+.nb{background:var(--color-background-secondary);border:1px solid var(--color-border-tertiary);border-radius:6px;padding:5px 12px;font-size:11px;cursor:pointer;color:var(--color-text-secondary)}
+.nb:hover{background:var(--color-background-tertiary)}
+.nb:disabled{opacity:.3;cursor:default}
+.dots{display:flex;gap:5px;align-items:center}
+.d2{width:5px;height:5px;border-radius:50%;background:var(--color-border-secondary);transition:all .1s}
+.d2.a{background:var(--color-text-secondary);width:7px;height:7px}
+</style>
+<div class="pw">
+<div class="strip" id="strip"></div>
+<div class="dp" id="dp"></div>
+<div class="nav">
+  <button class="nb" id="bp" onclick="mv(-1)">← Prev</button>
+  <div class="dots" id="dots"></div>
+  <button class="nb" id="bn" onclick="mv(1)">Next →</button>
+</div>
+</div>
+<script>
+const dk = matchMedia('(prefers-color-scheme:dark)').matches;
+const C = {
+  gray:  dk?{bg:'#2C2C2A',bd:'#888780',tx:'#D3D1C7'}:{bg:'#F1EFE8',bd:'#5F5E5A',tx:'#444441'},
+  blue:  dk?{bg:'#042C53',bd:'#378ADD',tx:'#B5D4F4'}:{bg:'#E6F1FB',bd:'#185FA5',tx:'#0C447C'},
+  teal:  dk?{bg:'#04342C',bd:'#1D9E75',tx:'#9FE1CB'}:{bg:'#E1F5EE',bd:'#0F6E56',tx:'#085041'},
+  purp:  dk?{bg:'#26215C',bd:'#7F77DD',tx:'#CECBF6'}:{bg:'#EEEDFE',bd:'#534AB7',tx:'#3C3489'},
+  coral: dk?{bg:'#4A1B0C',bd:'#D85A30',tx:'#F5C4B3'}:{bg:'#FAECE7',bd:'#993C1D',tx:'#712B13'},
+};
+const S=[
+{cat:'gray',sh:'Client',sub:'request origin',
+ title:'Client — HTTP request',tech:'HTTP client · any language or tool',mut:false,
+ enters:['User sends a filename and authentication token','Has no direct access to underlying files','Speaks only to the masking API on port 8000'],
+ exits:['POST /mask with JSON body containing filename','X-API-Token header identifying the caller'],
+ before:null,
+ after:`POST /mask HTTP/1.1\nHost: masking-api:8000\nX-API-Token: analyst-token-xyz\nContent-Type: application/json\n\n{ "filename": "patients.json" }`},
+
+{cat:'blue',sh:'RBAC',sub:'auth + routing',
+ title:'FastAPI + RBAC — authentication layer',tech:'Python · FastAPI · Uvicorn ASGI server',mut:false,
+ enters:['Raw HTTP request bytes','X-API-Token header value (opaque string)'],
+ exits:['Resolved role string → pipeline','HTTP 401 immediately if token unknown — pipeline never invoked'],
+ before:`X-API-Token: analyst-token-xyz\n\ntoken store (from env JSON):\n  "analyst-token-xyz" → "analyst"\n  "admin-token-abc"   → "operator"\n  "auditor-token-123" → "auditor"`,
+ after:`resolved role = "analyst"\n\n  analyst  → full masking pipeline applied\n  operator → pipeline bypassed, raw file returned\n             + audit log entry written first\n  auditor  → labelled output (technique names)\n             + /audit/coverage available`},
+
+{cat:'gray',sh:'File reader',sub:'secure disk I/O',
+ title:'File reader — secure file access',tech:'Python · pathlib · os.path.realpath()',mut:false,
+ enters:['Filename string from request body','Base directory path from environment variable'],
+ exits:['Raw file bytes (unparsed)','Format hint string derived from extension'],
+ before:`filename  = "patients.json"\nbase_dir  = "/data/files"\n\nsecurity checks:\n  resolve absolute path\n  verify stays inside base_dir\n  reject ../ traversal attempts → HTTP 403\n  reject unknown extensions   → HTTP 400`,
+ after:`resolved: /data/files/patients.json  ✓\nextension: .json → format = "json"\n\nformat registry:\n  .xml  → XMLAdapter  (lxml)\n  .json → JSONAdapter (json + jsonpath-ng)\n  .yaml → YAMLAdapter (pyyaml + jsonpath-ng)\n\nreturns: 412 raw bytes, format="json"`},
+
+{cat:'teal',sh:'Adapter parse',sub:'format → node tree',
+ title:'Format adapter — parse to unified node tree',tech:'JSONAdapter: json.loads() + NodeWrapper · lxml for XML · PyYAML for YAML',mut:false,
+ enters:['Raw bytes in any supported format','Format string selecting the adapter'],
+ exits:['Unified NodeWrapper tree (JSON/YAML) or lxml ElementTree (XML)','Every value carries parent ref, key, and path string'],
+ before:`raw JSON bytes:\n{"patients":[{\n  "name": "Alice Johnson",\n  "dob":  "1985-03-15",\n  "ssn":  "542-88-1234",\n  "zip":  "90210",\n  "diagnosis": "J18.9",\n  "gender": "F"\n}]}`,
+ after:`NodeWrapper tree (YAML/JSON) — all values wrapped:\n\nroot          path="$"\n  patients[0] path="$.patients[0]"\n    name      path="$.patients[0].name"  val="Alice Johnson"\n    dob       path="$.patients[0].dob"   val="1985-03-15"\n    ssn       path="$.patients[0].ssn"   val="542-88-1234"\n    zip       path="$.patients[0].zip"   val="90210"\n    diagnosis path="$.patients[0].diagnosis" val="J18.9"\n    gender    path="$.patients[0].gender" val="F"\n\nXML: lxml Element objects used directly (no wrapper needed)`},
+
+{cat:'purp',sh:'Phase 1',sub:'index building',
+ title:'Phase 1 — index building (zero mutations)',tech:'Python · adapter.select(selector) · adapter.iter_nodes(tree)',mut:false,
+ enters:['Intact node tree (no mutations yet)','All policy rules with their selectors + techniques'],
+ exits:['rule_index: node identity → list of matching rules','coverage_index: node paths with no rule'],
+ before:`evaluate every rule selector against intact tree:\n\n  $..name       matched → [name_node]\n  $..dob        matched → [dob_node]\n  $..ssn        matched → [ssn_node]\n  $..zip        matched → [zip_node]\n  $..diagnosis  matched → [diag_node]\n  $..*[@pii]    matched → [name_node]  ← also matches name!\n\nthen iter every node to find uncovered ones`,
+ after:`rule_index (node id → competing rules):\n  id(name_node) → [pseudonymize, redact]  ← CONFLICT\n  id(dob_node)  → [generalize:date:2]\n  id(ssn_node)  → [suppress]\n  id(zip_node)  → [generalize:zip:2]\n  id(diag_node) → [generalize:icd10:1]\n\ncoverage_index (nodes matched by no rule):\n  $.patients[0].gender → uncovered\n\nTREE IS COMPLETELY UNCHANGED`},
+
+{cat:'purp',sh:'Phase 2',sub:'conflict resolution',
+ title:'Phase 2 — conflict resolution (zero mutations)',tech:'Python · specificity scorer · document order tiebreak',mut:false,
+ enters:['rule_index with all competing rule lists','Policy rule list (for document-order tiebreak)'],
+ exits:['decision_index: node id → exactly one winning rule','Full conflict_log (stored for auditor)'],
+ before:`conflict at id(name_node):\n\n  rule A  selector: "$..name"\n          specificity score: 10\n          (1 explicit field name × 10pts)\n\n  rule B  selector: "$..*[@pii]"\n          specificity score:  5\n          (wildcard=0pts, predicate=5pts)\n\n  WINNER = rule A  (score 10 > score 5)`,
+ after:`decision_index (one winner per node):\n  id(name_node) → pseudonymize       ✓ score 10\n  id(dob_node)  → generalize:date:2  ✓ no conflict\n  id(ssn_node)  → suppress           ✓ no conflict\n  id(zip_node)  → generalize:zip:2   ✓ no conflict\n  id(diag_node) → generalize:icd10:1 ✓ no conflict\n\nconflict_log: 1 entry\n  node: "$.patients[0].name"\n  winner: $..name (score 10)\n  loser:  $..*[@pii] (score 5)\n\nTREE STILL COMPLETELY UNCHANGED`},
+
+{cat:'purp',sh:'Phase 3',sub:'★ masking loop',
+ title:'Phase 3 — masking loop  ★  first mutations',tech:'Python · adapter.set_value() · adapter.remove_node() · adapter.is_attached()',mut:true,
+ enters:['NodeWrapper tree (still intact — phase 2 never touched it)','decision_index (one winner per node)','Role string (determines whether to mask or label)'],
+ exits:['Mutated node tree — values replaced or nodes removed','coverage_log (uncovered nodes + skipped detached nodes)'],
+ before:`iter every node exactly once:\n\n  name      → lookup decision_index → pseudonymize\n  dob       → lookup decision_index → generalize:date:2\n  ssn       → lookup decision_index → suppress\n  zip       → lookup decision_index → generalize:zip:2\n  diagnosis → lookup decision_index → generalize:icd10:1\n  gender    → not in decision_index → check role\n              analyst: leave unchanged, log as uncovered\n              auditor: replace with [UNMASKED — NO RULE]`,
+ after:`MUTATIONS APPLIED (analyst role):\n\n  name:      "Alice Johnson" → "ANON_7f3a2c91"\n             SHA-256("Alice Johnson")[:8], prefixed\n\n  dob:       "1985-03-15"   → "1985"\n             DateHierarchy.generalise(val, level=2)\n\n  ssn:       "542-88-1234"  → (node detached)\n             adapter.remove_node(ssn_node)\n\n  zip:       "90210"        → "902**"\n             ZipHierarchy.generalise(val, level=2)\n\n  diagnosis: "J18.9"        → "J18"\n             ICD10Hierarchy.generalise(val, level=1)\n\n  gender:    "F"            → "F"  (unchanged)\n             logged: coverage_log += {gender: uncovered}`},
+
+{cat:'coral',sh:'k-Anon',sub:'global privacy',
+ title:'k-Anonymity engine  ★  further mutations possible',tech:'Python · adapter.select() · equivalence class grouping · iterative generalisation',mut:true,
+ enters:['Mutated tree from Phase 3','k-anon config: k=5, quasi-identifiers=[dob, zip, gender]'],
+ exits:['Further mutated tree (QI nodes updated if violations found)','k-anon report: satisfied bool + violating class details'],
+ before:`extract QI tuples from all records after Phase 3:\n\nRecord 0: dob="1985" zip="902**" gender="F"\n\nequivalence classes:\n  ("1985", "902**", "F") → {record_0}  size = 1\n\nrequired: all classes size >= k=5\nresult:   size 1 < 5  → VIOLATION`,
+ after:`iteration 1 — generalise worst QI (dob has most distinct values):\n  dob "1985" → "1980s"  (DateHierarchy level 3)\n  re-check: class size still 1 → violation\n\niteration 2 — generalise dob further:\n  dob "1980s" → "*"  (DateHierarchy level 4)\n  re-check: class size still 1 → max level reached\n\nk-anon report:\n  satisfied: false  (only 1 record, k=5 impossible)\n  violating_classes: 1\n  response header: X-K-Anon-Satisfied: false\n\ndob node updated in tree: "1985" → "*"`},
+
+{cat:'teal',sh:'Serialise',sub:'tree → format',
+ title:'Format adapter — serialise back to original format',tech:'json.dumps() · etree.tostring() · yaml.dump() — same adapter instance, reverse direction',mut:false,
+ enters:['Fully mutated node tree','Original format string (same adapter used in reverse)'],
+ exits:['Output bytes in original file format','Ready to attach to HTTP response body'],
+ before:`mutated NodeWrapper tree state:\n  name:      "ANON_7f3a2c91"\n  dob:       "*"             (k-anon forced this)\n  ssn:       (absent)        (suppressed in Phase 3)\n  zip:       "902**"\n  diagnosis: "J18"\n  gender:    "F"`,
+ after:`json.dumps() unwraps NodeWrapper → plain dict:\n\n{\n  "patients": [{\n    "name":      "ANON_7f3a2c91",\n    "dob":       "*",\n    "zip":       "902**",\n    "diagnosis": "J18",\n    "gender":    "F"\n  }]\n}\n\nnote: "ssn" key is absent entirely\n      remove_node() detached it from parent dict\noutput: 118 bytes`},
+
+{cat:'gray',sh:'Response',sub:'role-based output',
+ title:'Response — role-tailored HTTP output',tech:'FastAPI · Response · Content-Type per format',mut:false,
+ enters:['Output bytes (or raw bytes for operator)','Role string + conflict log + coverage log + k-anon report'],
+ exits:['HTTP response body appropriate to role','Response headers for audit + correlation'],
+ before:`three roles, three outputs from same pipeline run:\n\n  ANALYST  → masked body\n             no conflict details, no original values\n\n  OPERATOR → raw bytes (pipeline bypassed entirely)\n             audit log written BEFORE response sent\n             fails with HTTP 500 if audit write fails\n\n  AUDITOR  → labelled body:\n             name: [PSEUDONYMIZED]\n             dob:  [GENERALIZED: date level 2]\n             ssn:  [SUPPRESSED]\n             zip:  [GENERALIZED: zip level 2]\n             diagnosis: [GENERALIZED: icd10 level 1]\n             gender: [UNMASKED — NO RULE DEFINED]`,
+ after:`HTTP/1.1 200 OK\nContent-Type: application/json\nX-Request-ID:         req_4f2a9c81\nX-Policy-Version:     1.0\nX-Role:               analyst\nX-Conflicts-Detected: 1\nX-Uncovered-Nodes:    1\nX-K-Anon-Satisfied:   false\n\n{\n  "patients": [{\n    "name":      "ANON_7f3a2c91",\n    "dob":       "*",\n    "zip":       "902**",\n    "diagnosis": "J18",\n    "gender":    "F"\n  }]\n}`},
+];
+
+let cur=0;
+function e(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+
+function buildStrip(){
+  const el=document.getElementById('strip');
+  el.innerHTML='';
+  S.forEach((s,i)=>{
+    const c=C[s.cat];
+    const act=i===cur;
+    const activeBg=act?c.bd:c.bg;
+    const activeTx=act?(dk?c.bg:'#fff'):c.tx;
+    const box=document.createElement('div');
+    box.className='sbox';
+    box.onclick=()=>go(i);
+    box.setAttribute('role','button');
+    box.setAttribute('aria-label',`Stage ${i}: ${s.sh}`);
+    box.innerHTML=`<div class="snum" style="background:${activeBg};border-color:${c.bd};color:${activeTx}">${i}</div><div class="slbl" style="color:${act?c.bd:'var(--color-text-tertiary)'}">${e(s.sh)}</div>`;
+    el.appendChild(box);
+    if(i<S.length-1){
+      const arr=document.createElement('div');
+      arr.className='sarr';
+      arr.innerHTML='›';
+      el.appendChild(arr);
+    }
+  });
+}
+
+function buildDetail(){
+  const s=S[cur];
+  const c=C[s.cat];
+  const coral=C.coral;
+  const gray=C.gray;
+  const mutHtml=s.mut
+    ? `<span class="mbadge" style="background:${coral.bg};color:${coral.tx};border:1px solid ${coral.bd}">★ data mutated at this stage</span>`
+    : `<span class="mbadge" style="background:${gray.bg};color:${gray.tx};border:1px solid ${gray.bd}">data unchanged at this stage</span>`;
+
+  const ent=s.enters.map(x=>`<li class="dli"><div class="ddot" style="background:${c.bd}"></div><span>${e(x)}</span></li>`).join('');
+  const ext=s.exits.map(x=>`<li class="dli"><div class="ddot" style="background:${c.bd}"></div><span>${e(x)}</span></li>`).join('');
+  const pre1=s.before?`<p class="ch" style="margin-top:10px">data entering this stage</p><pre class="pre">${e(s.before)}</pre>`:'' ;
+  const pre2=s.after?`<p class="ch" style="margin-top:10px">data leaving this stage</p><pre class="pre">${e(s.after)}</pre>`:'';
+
+  document.getElementById('dp').innerHTML=`
+    <div class="dph">
+      <div class="dpbadge" style="background:${c.bg};color:${c.tx};border:1px solid ${c.bd}">${e(s.cat)}</div>
+      <div style="min-width:0">
+        <p class="dptitle">${e(s.title)}</p>
+        <p class="dptech">${e(s.tech)}</p>
+      </div>
+    </div>
+    <div class="dpbody">
+      <div class="dpcol">
+        ${mutHtml}
+        <p class="ch">what arrives</p>
+        <ul class="dlist">${ent}</ul>
+        <p class="ch" style="margin-top:12px">what leaves</p>
+        <ul class="dlist">${ext}</ul>
+      </div>
+      <div class="dpcol" style="min-width:0">
+        ${pre1}${pre2}
+      </div>
+    </div>`;
+}
+
+function buildDots(){
+  document.getElementById('dots').innerHTML=S.map((_,i)=>`<div class="d2${i===cur?' a':''}"></div>`).join('');
+}
+
+function render(){
+  buildStrip();buildDetail();buildDots();
+  document.getElementById('bp').disabled=cur===0;
+  document.getElementById('bn').disabled=cur===S.length-1;
+}
+
+function go(i){cur=i;render();}
+function mv(d){cur=Math.max(0,Math.min(S.length-1,cur+d));render();}
+
+render();
+</script>

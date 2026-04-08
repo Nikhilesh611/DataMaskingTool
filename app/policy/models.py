@@ -71,7 +71,7 @@ class MaskingPolicy(BaseModel):
 
     version: str
     format: Optional[str] = None          # overrides file extension detection
-    record_root: str                       # selector that identifies record boundaries
+    record_root: str | List[str]           # selector(s) that identify record boundaries
     rules: List[MaskingRule] = Field(default_factory=list)
     k_anonymity: Optional[KAnonConfig] = None
 

@@ -14,14 +14,22 @@ from app.adapters.base import FormatAdapter
 from app.exceptions import ParseError
 
 
+class XMLTreeWrapper:
+    """Holds references to all lxml elements to keep proxies alive and id() stable."""
+    def __init__(self, root: etree._Element):
+        self.root = root
+        self.keep_alive = list(root.iter())
+
+
 class XMLAdapter(FormatAdapter):
     """Concrete adapter for XML files using lxml."""
 
     # ── Parsing / serialisation ───────────────────────────────────────────────
 
-    def parse(self, raw: bytes) -> etree._Element:
+    def parse(self, raw: bytes) -> XMLTreeWrapper:
         try:
-            return etree.fromstring(raw)
+            tree = etree.fromstring(raw)
+            return XMLTreeWrapper(tree)
         except etree.XMLSyntaxError as exc:
             # lxml provides line/column information in the exception.
             location = f"line {exc.lineno}, col {exc.offset}" if exc.lineno else None
@@ -32,10 +40,11 @@ class XMLAdapter(FormatAdapter):
                 location=location,
             ) from exc
 
-    def parse_with_filename(self, raw: bytes, filename: str) -> etree._Element:
+    def parse_with_filename(self, raw: bytes, filename: str) -> XMLTreeWrapper:
         """Variant that records the filename in any ParseError for cleaner logs."""
         try:
-            return etree.fromstring(raw)
+            tree = etree.fromstring(raw)
+            return XMLTreeWrapper(tree)
         except etree.XMLSyntaxError as exc:
             location = f"line {exc.lineno}, col {exc.offset}" if exc.lineno else None
             raise ParseError(
@@ -45,14 +54,15 @@ class XMLAdapter(FormatAdapter):
                 location=location,
             ) from exc
 
-    def serialise(self, tree: etree._Element) -> bytes:
-        return etree.tostring(tree, pretty_print=True, xml_declaration=True, encoding="UTF-8")
+    def serialise(self, tree: XMLTreeWrapper) -> bytes:
+        # Before serialising, we don't strictly need keep_alive anymore, but we serialize the root.
+        return etree.tostring(tree.root, pretty_print=True, xml_declaration=True, encoding="UTF-8")
 
     # ── Tree traversal ────────────────────────────────────────────────────────
 
-    def iter_nodes(self, tree: etree._Element) -> Iterable[etree._Element]:
+    def iter_nodes(self, tree: XMLTreeWrapper) -> Iterable[etree._Element]:
         """Yield every element in depth-first document order via lxml's iter."""
-        yield from tree.iter()
+        yield from tree.root.iter()
 
     # ── Node identity & value ─────────────────────────────────────────────────
 
@@ -100,10 +110,15 @@ class XMLAdapter(FormatAdapter):
 
     # ── Selector evaluation ───────────────────────────────────────────────────
 
-    def select(self, tree: etree._Element, selector: str) -> List[etree._Element]:
+    def select(self, tree: XMLTreeWrapper, selector: str) -> List[etree._Element]:
         """Evaluate an XPath 1.0 expression against *tree*."""
         try:
-            results = tree.xpath(selector)
+            if isinstance(tree, XMLTreeWrapper):
+                results = tree.root.xpath(selector)
+            else:
+                # Handle case where a raw lxml element is passed 
+                # (e.g. kanon.py uses select() relative to individual nodes)
+                results = tree.xpath(selector)
         except etree.XPathEvalError as exc:
             # Invalid XPath — return empty list rather than crashing.
             return []
