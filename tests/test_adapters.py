@@ -32,8 +32,8 @@ class TestXMLAdapter:
         self.tree = self.adapter.parse(XML_DOC)
 
     def test_parse_returns_element(self):
-        from lxml import etree
-        assert isinstance(self.tree, etree._Element)
+        from app.adapters.xml_adapter import XMLTreeWrapper
+        assert isinstance(self.tree, XMLTreeWrapper)
 
     def test_iter_visits_all_elements(self):
         nodes = list(self.adapter.iter_nodes(self.tree))
@@ -91,7 +91,7 @@ class TestXMLAdapter:
         assert not self.adapter.is_attached(nested)
 
     def test_root_is_attached(self):
-        assert self.adapter.is_attached(self.tree)
+        assert self.adapter.is_attached(self.tree.root)
 
     def test_serialise_produces_bytes(self):
         out = self.adapter.serialise(self.tree)

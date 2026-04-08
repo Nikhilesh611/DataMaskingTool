@@ -1,0 +1,59 @@
+DATA MASKING PIPELINE - RULES AND TECHNIQUES EXPLANATION
+======================================================
+This document outlines the active privacy-preserving data masking rules that are applied identically to XML, JSON, and YAML files through the unified `policy.yaml` configuration file. 
+
+Because the pipeline is format-agnostic, the exact same rules are enforced seamlessly across completely different storage formats (thanks to the paired XPath and JSONPath selectors).
+
+Here are the specific rules and the effects they have on the documents:
+
+1. SSN (Social Security Number)
+-------------------------------
+- Technique: `suppress`
+- Selectors: `$..ssn` & `//ssn`
+- Effect: The node is completely deleted from the document. In XML, the `<ssn>` tag is erased. In JSON/YAML, the `"ssn"` key is removed. This prevents highly sensitive identifying information from ever leaking into lower environments.
+
+2. Patient Name
+---------------
+- Technique: `redact`
+- Selectors: `$..name` & `//name`
+- Effect: The original text is overwritten with the literal string `[REDACTED]`. The node survives in the document structure but the identifying name is destroyed.
+
+3. Email Address
+----------------
+- Technique: `pseudonymize` (Consistent)
+- Selectors: `$..email` & `//email`
+- Effect: The email is cryptographically hashed with a deterministic secret salt and replaced with a fake string like `ANON_ff8d9819`. Because `consistent: true` is set, `alice@example.com` will always hash to the *exact same* pseudonym across multiple different document runs, allowing researchers to track the same patient longitudinally without knowing who they are!
+
+4. Date of Birth (DOB)
+----------------------
+- Technique: `generalize` (Hierarchy: date, Level: 2)
+- Selectors: `$..dob` & `//dob`
+- Effect: Reduces the precision of the date to prevent re-identification. Level 2 truncation reduces a YYYY-MM-DD string into just the year (YYYY). 
+
+5. Zip Code
+-----------
+- Technique: `generalize` (Hierarchy: zipcode, Level: 2)
+- Selectors: `$..zipcode` & `//zipcode`
+- Effect: Masks the last two digits of a 5-digit US zip code, replacing them with asterisks (e.g., `10001` becomes `100**`). This maintains regional analytical value while expanding the geographical footprint of the patient to ensure anonymity.
+
+6. Diagnosis (ICD-10 Code)
+--------------------------
+- Technique: `generalize` (Hierarchy: icd10, Level: 1)
+- Selectors: `$..diagnosis` & `//diagnosis`
+- Effect: Truncates highly specific diagnosis codes. For example, `J18.9` (Pneumonia, unspecified organism) is reduced to just the category `J18` (Pneumonia, organism unspecified), hiding exact medical sub-classifications.
+
+7. Blood Pressure
+-----------------
+- Technique: `noise`
+- Selectors: `$..bloodpressure` & `//bloodpressure`
+- Effect: Mathematical noise (a randomized variance percentage) is applied to numeric floats. The blood pressure value is shifted up or down, protecting the exact biometric reading but preserving the statistical distribution over a large dataset.
+
+8. Physical Address 
+-------------------
+- Technique: `nullify`
+- Selectors: `$..address` & `//address`
+- Effect: Replaces the value with `None`/`null`. In JSON, this produces `"address": null`. In XML, it replaces `<address>123 Main St</address>` with a self-closing empty tag `<address/>`.
+
+K-Anonymity Engine
+------------------
+If any isolated group of patients shares the exact same combination of Quasi-Identifiers (in our setup: `dob` and `zipcode`) and the group size is smaller than `k=2`, the k-anonymity engine iteratively bumps up the `generalize` level of those fields until the group merges with another group, strictly enforcing statistical safety!

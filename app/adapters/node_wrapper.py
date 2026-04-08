@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 from typing import Any, Iterable, List, Optional, Union
 
 
-@dataclass
+@dataclass(eq=False)
 class NodeWrapper:
     """Carries a document value together with structural metadata."""
 
