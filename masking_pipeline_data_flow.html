@@ -1,5 +1,5 @@
 
-<h2 style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)">XML JSON YAML masking pipeline: 10-stage interactive data flow with transformation detail</h2>
+<h2 style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)">XML JSON YAML masking pipeline: 11-stage interactive data flow with transformation detail</h2>
 <style>
 *{box-sizing:border-box}
 .pw{padding:12px 0 20px;font-family:var(--font-sans,sans-serif)}
@@ -56,70 +56,77 @@ const S=[
  enters:['User sends a filename and authentication token','Has no direct access to underlying files','Speaks only to the masking API on port 8000'],
  exits:['POST /mask with JSON body containing filename','X-API-Token header identifying the caller'],
  before:null,
- after:`POST /mask HTTP/1.1\nHost: masking-api:8000\nX-API-Token: analyst-token-xyz\nContent-Type: application/json\n\n{ "filename": "patients.json" }`},
+ after:`POST /mask HTTP/1.1\nHost: masking-api:8000\nX-API-Token: analyst-token-xyz\nContent-Type: application/json\n\n{ "filename": "sample.xml" }`},
 
 {cat:'blue',sh:'RBAC',sub:'auth + routing',
  title:'FastAPI + RBAC — authentication layer',tech:'Python · FastAPI · Uvicorn ASGI server',mut:false,
  enters:['Raw HTTP request bytes','X-API-Token header value (opaque string)'],
  exits:['Resolved role string → pipeline','HTTP 401 immediately if token unknown — pipeline never invoked'],
- before:`X-API-Token: analyst-token-xyz\n\ntoken store (from env JSON):\n  "analyst-token-xyz" → "analyst"\n  "admin-token-abc"   → "operator"\n  "auditor-token-123" → "auditor"`,
- after:`resolved role = "analyst"\n\n  analyst  → full masking pipeline applied\n  operator → pipeline bypassed, raw file returned\n             + audit log entry written first\n  auditor  → labelled output (technique names)\n             + /audit/coverage available`},
+ before:`X-API-Token: analyst-token-xyz\n\ntoken store (from env JSON):\n  "tok-analyst-001" → "analyst"\n  "tok-op-001"      → "operator"\n  "tok-audit-001"   → "auditor"`,
+ after:`resolved role = "analyst"\n\n  analyst  → full masking pipeline applied\n  operator → pipeline bypassed, raw file returned\n             + audit log entry written first\n  auditor  → labelled output (technique names)\n             + [UNMASKED — NO RULE DEFINED] check`},
+
+{cat:'gray',sh:'Policy',sub:'app startup / global',
+ title:'Policy file reader & validator',tech:'Python · Pydantic v2 (models.yaml)',mut:false,
+ enters:['POLICY_PATH config from .env (e.g. ./policy.yaml)','Raw YAML policy bytes from disk'],
+ exits:['Immutable MaskingPolicy object pinned in memory','Pre-validated techniques and unified structures'],
+ before:`policy.yaml load:\nrecord_root:\n  - "$.patients[*]"\n  - "//patient"\n\nrules:\n  - selector: "//ssn"\n    technique: "suppress"`,
+ after:`MaskingPolicy(Pydantic):\n  Record roots resolved to generic List[str]\n  Rules strictly validated by decorators\n\nFastAPI stores this globally in app.state.policy\nso the masking loop pipeline NEVER hits the disk\nwhen a user request occurs!`},
 
 {cat:'gray',sh:'File reader',sub:'secure disk I/O',
  title:'File reader — secure file access',tech:'Python · pathlib · os.path.realpath()',mut:false,
  enters:['Filename string from request body','Base directory path from environment variable'],
  exits:['Raw file bytes (unparsed)','Format hint string derived from extension'],
- before:`filename  = "patients.json"\nbase_dir  = "/data/files"\n\nsecurity checks:\n  resolve absolute path\n  verify stays inside base_dir\n  reject ../ traversal attempts → HTTP 403\n  reject unknown extensions   → HTTP 400`,
- after:`resolved: /data/files/patients.json  ✓\nextension: .json → format = "json"\n\nformat registry:\n  .xml  → XMLAdapter  (lxml)\n  .json → JSONAdapter (json + jsonpath-ng)\n  .yaml → YAMLAdapter (pyyaml + jsonpath-ng)\n\nreturns: 412 raw bytes, format="json"`},
+ before:`filename  = "sample.xml"\nbase_dir  = "/data"\n\nsecurity checks:\n  resolve absolute path\n  verify stays inside base_dir\n  reject ../ traversal attempts → HTTP 403\n  reject unknown extensions   → HTTP 400`,
+ after:`resolved: /data/sample.xml  ✓\nextension: .xml → format = "xml"\n\nformat registry:\n  .xml  → XMLAdapter  (lxml)\n  .json → JSONAdapter (json + jsonpath-ng)\n  .yaml → YAMLAdapter (pyyaml + jsonpath-ng)\n\nreturns: raw bytes, format="xml"`},
 
 {cat:'teal',sh:'Adapter parse',sub:'format → node tree',
- title:'Format adapter — parse to unified node tree',tech:'JSONAdapter: json.loads() + NodeWrapper · lxml for XML · PyYAML for YAML',mut:false,
+ title:'Format adapter — parse to unified node tree',tech:'JSONAdapter: NodeWrapper · XMLAdapter: XMLTreeWrapper',mut:false,
  enters:['Raw bytes in any supported format','Format string selecting the adapter'],
- exits:['Unified NodeWrapper tree (JSON/YAML) or lxml ElementTree (XML)','Every value carries parent ref, key, and path string'],
- before:`raw JSON bytes:\n{"patients":[{\n  "name": "Alice Johnson",\n  "dob":  "1985-03-15",\n  "ssn":  "542-88-1234",\n  "zip":  "90210",\n  "diagnosis": "J18.9",\n  "gender": "F"\n}]}`,
- after:`NodeWrapper tree (YAML/JSON) — all values wrapped:\n\nroot          path="$"\n  patients[0] path="$.patients[0]"\n    name      path="$.patients[0].name"  val="Alice Johnson"\n    dob       path="$.patients[0].dob"   val="1985-03-15"\n    ssn       path="$.patients[0].ssn"   val="542-88-1234"\n    zip       path="$.patients[0].zip"   val="90210"\n    diagnosis path="$.patients[0].diagnosis" val="J18.9"\n    gender    path="$.patients[0].gender" val="F"\n\nXML: lxml Element objects used directly (no wrapper needed)`},
+ exits:['Unified NodeWrapper tree (JSON/YAML) or XMLTreeWrapper (XML)','Values carry stable identities to prevent GC (garbage collection) bugs!'],
+ before:`raw bytes:\n<patients>\n  <patient>\n    <name>Alice Johnson</name>\n  ...\n</patients>`,
+ after:`NodeWrapper tree (YAML/JSON):\n  Wraps plain dicts/lists to give them a stable id().\n  (eq=False prevents infinite equality recursion!).\n\nXMLTreeWrapper (XML):\n  Takes a permanent snapshot of list(root.iter())\n  to keep lxml proxy objects firmly alive in memory,\n  ensuring that id(node) remains perfectly stable\n  for Phase 3 identity checks!`},
 
 {cat:'purp',sh:'Phase 1',sub:'index building',
  title:'Phase 1 — index building (zero mutations)',tech:'Python · adapter.select(selector) · adapter.iter_nodes(tree)',mut:false,
- enters:['Intact node tree (no mutations yet)','All policy rules with their selectors + techniques'],
+ enters:['Intact node tree (no mutations yet)','Universal policy with dual-format rules (XPath + JSONPath)'],
  exits:['rule_index: node identity → list of matching rules','coverage_index: node paths with no rule'],
- before:`evaluate every rule selector against intact tree:\n\n  $..name       matched → [name_node]\n  $..dob        matched → [dob_node]\n  $..ssn        matched → [ssn_node]\n  $..zip        matched → [zip_node]\n  $..diagnosis  matched → [diag_node]\n  $..*[@pii]    matched → [name_node]  ← also matches name!\n\nthen iter every node to find uncovered ones`,
- after:`rule_index (node id → competing rules):\n  id(name_node) → [pseudonymize, redact]  ← CONFLICT\n  id(dob_node)  → [generalize:date:2]\n  id(ssn_node)  → [suppress]\n  id(zip_node)  → [generalize:zip:2]\n  id(diag_node) → [generalize:icd10:1]\n\ncoverage_index (nodes matched by no rule):\n  $.patients[0].gender → uncovered\n\nTREE IS COMPLETELY UNCHANGED`},
+ before:`evaluate universal selector rules:\n\n  $..name  (JSON) → [name_node] or [] \n  //name   (XML)  → [] or [name_node]\n\n  $..ssn   (JSON) \n  //ssn    (XML)  \n\nadapter safely swallows SyntaxErrors for whichever path language doesn't natively match its structural format!`,
+ after:`rule_index (node id → competing rules):\n  id(name_node) → [pseudonymize, redact]  ← CONFLICT\n  id(dob_node)  → [generalize:date:2]\n  id(ssn_node)  → [suppress]\n\ncoverage_index (nodes matched by no rule):\n  /patients/patient/gender → uncovered\n\nTREE IS COMPLETELY UNCHANGED`},
 
 {cat:'purp',sh:'Phase 2',sub:'conflict resolution',
  title:'Phase 2 — conflict resolution (zero mutations)',tech:'Python · specificity scorer · document order tiebreak',mut:false,
  enters:['rule_index with all competing rule lists','Policy rule list (for document-order tiebreak)'],
  exits:['decision_index: node id → exactly one winning rule','Full conflict_log (stored for auditor)'],
- before:`conflict at id(name_node):\n\n  rule A  selector: "$..name"\n          specificity score: 10\n          (1 explicit field name × 10pts)\n\n  rule B  selector: "$..*[@pii]"\n          specificity score:  5\n          (wildcard=0pts, predicate=5pts)\n\n  WINNER = rule A  (score 10 > score 5)`,
- after:`decision_index (one winner per node):\n  id(name_node) → pseudonymize       ✓ score 10\n  id(dob_node)  → generalize:date:2  ✓ no conflict\n  id(ssn_node)  → suppress           ✓ no conflict\n  id(zip_node)  → generalize:zip:2   ✓ no conflict\n  id(diag_node) → generalize:icd10:1 ✓ no conflict\n\nconflict_log: 1 entry\n  node: "$.patients[0].name"\n  winner: $..name (score 10)\n  loser:  $..*[@pii] (score 5)\n\nTREE STILL COMPLETELY UNCHANGED`},
+ before:`conflict at id(name_node):\n\n  rule A  selector: "//name"\n          specificity score: 10\n          (1 explicit field name × 10pts)\n\n  rule B  selector: "//*"\n          specificity score:  0\n          (wildcard=0pts)\n\n  WINNER = rule A  (score 10 > score 0)`,
+ after:`decision_index (one winner per node):\n  id(name_node) → pseudonymize       ✓ score 10\n  id(dob_node)  → generalize:date:2  ✓ no conflict\n  id(ssn_node)  → suppress           ✓ no conflict\n  id(zip_node)  → generalize:zip:2   ✓ no conflict\n\nconflict_log: 1 entry\n  node: "/patients/patient/name"\n  winner: //name (score 10)\n  loser:  //* (score 0)\n\nTREE STILL COMPLETELY UNCHANGED`},
 
 {cat:'purp',sh:'Phase 3',sub:'★ masking loop',
  title:'Phase 3 — masking loop  ★  first mutations',tech:'Python · adapter.set_value() · adapter.remove_node() · adapter.is_attached()',mut:true,
- enters:['NodeWrapper tree (still intact — phase 2 never touched it)','decision_index (one winner per node)','Role string (determines whether to mask or label)'],
+ enters:['Tree wrapper (still intact — phase 2 never touched it)','decision_index (one winner per node)','Role string (determines whether to mask or label)'],
  exits:['Mutated node tree — values replaced or nodes removed','coverage_log (uncovered nodes + skipped detached nodes)'],
- before:`iter every node exactly once:\n\n  name      → lookup decision_index → pseudonymize\n  dob       → lookup decision_index → generalize:date:2\n  ssn       → lookup decision_index → suppress\n  zip       → lookup decision_index → generalize:zip:2\n  diagnosis → lookup decision_index → generalize:icd10:1\n  gender    → not in decision_index → check role\n              analyst: leave unchanged, log as uncovered\n              auditor: replace with [UNMASKED — NO RULE]`,
- after:`MUTATIONS APPLIED (analyst role):\n\n  name:      "Alice Johnson" → "ANON_7f3a2c91"\n             SHA-256("Alice Johnson")[:8], prefixed\n\n  dob:       "1985-03-15"   → "1985"\n             DateHierarchy.generalise(val, level=2)\n\n  ssn:       "542-88-1234"  → (node detached)\n             adapter.remove_node(ssn_node)\n\n  zip:       "90210"        → "902**"\n             ZipHierarchy.generalise(val, level=2)\n\n  diagnosis: "J18.9"        → "J18"\n             ICD10Hierarchy.generalise(val, level=1)\n\n  gender:    "F"            → "F"  (unchanged)\n             logged: coverage_log += {gender: uncovered}`},
+ before:`iter every node exactly once:\n\n  name      → lookup decision_index → pseudonymize\n  dob       → lookup decision_index → generalize:date:2\n  ssn       → lookup decision_index → suppress\n  gender    → not in decision_index → check role\n              analyst: leave unchanged\n              auditor: set [UNMASKED — NO RULE]\n              (structural whitespace also flagged as a leaf!)`,
+ after:`MUTATIONS APPLIED (analyst role):\n\n  name:      "Alice Johnson" → "ANON_7f3a2c91"\n             SHA-256("Alice Johnson")[:8], prefixed\n\n  dob:       "1985-03-15"   → "1985"\n             DateHierarchy.generalise(val, level=2)\n\n  ssn:       "123-45-..."   → (node detached)\n             adapter.remove_node(ssn_node)\n\n  address:   "123 Main St"  → (empty/null)\n             adapter.set_value(address_node, None)`},
 
 {cat:'coral',sh:'k-Anon',sub:'global privacy',
  title:'k-Anonymity engine  ★  further mutations possible',tech:'Python · adapter.select() · equivalence class grouping · iterative generalisation',mut:true,
- enters:['Mutated tree from Phase 3','k-anon config: k=5, quasi-identifiers=[dob, zip, gender]'],
+ enters:['Mutated tree from Phase 3','k-anon config: multiple record-roots and universal QI-selectors'],
  exits:['Further mutated tree (QI nodes updated if violations found)','k-anon report: satisfied bool + violating class details'],
- before:`extract QI tuples from all records after Phase 3:\n\nRecord 0: dob="1985" zip="902**" gender="F"\n\nequivalence classes:\n  ("1985", "902**", "F") → {record_0}  size = 1\n\nrequired: all classes size >= k=5\nresult:   size 1 < 5  → VIOLATION`,
- after:`iteration 1 — generalise worst QI (dob has most distinct values):\n  dob "1985" → "1980s"  (DateHierarchy level 3)\n  re-check: class size still 1 → violation\n\niteration 2 — generalise dob further:\n  dob "1980s" → "*"  (DateHierarchy level 4)\n  re-check: class size still 1 → max level reached\n\nk-anon report:\n  satisfied: false  (only 1 record, k=5 impossible)\n  violating_classes: 1\n  response header: X-K-Anon-Satisfied: false\n\ndob node updated in tree: "1985" → "*"`},
+ before:`extract records across ALL languages:\nrecord_root = ["$.patients[*]", "//patient"]\n\nextract Quasi Identifiers across ALL languages:\nqi_selectors = ["$..dob", ".//dob", ...]\n\nNote: .//dob is used for XML instead of //dob so\nit correctly evaluates relative to the patient record,\nrather than jumping back up to the document root!`,
+ after:`iteration 1 — generalise worst QI (dob has most distinct values):\n  dob "1985" → "1980s"  (DateHierarchy level 3)\n  re-check: class size still 1 → violation\n\niteration 2 — generalise dob further:\n  dob "1980s" → "*"  (DateHierarchy level 4)\n  re-check: class size still 1 → max level reached\n\nk-anon report:\n  satisfied: false  (if k=2 impossible)\n  violating_classes: 1\n  response header: x-k-anonymity-achieved: false\n\ndob node updated in tree: "1985" → "*"`},
 
 {cat:'teal',sh:'Serialise',sub:'tree → format',
  title:'Format adapter — serialise back to original format',tech:'json.dumps() · etree.tostring() · yaml.dump() — same adapter instance, reverse direction',mut:false,
  enters:['Fully mutated node tree','Original format string (same adapter used in reverse)'],
  exits:['Output bytes in original file format','Ready to attach to HTTP response body'],
- before:`mutated NodeWrapper tree state:\n  name:      "ANON_7f3a2c91"\n  dob:       "*"             (k-anon forced this)\n  ssn:       (absent)        (suppressed in Phase 3)\n  zip:       "902**"\n  diagnosis: "J18"\n  gender:    "F"`,
- after:`json.dumps() unwraps NodeWrapper → plain dict:\n\n{\n  "patients": [{\n    "name":      "ANON_7f3a2c91",\n    "dob":       "*",\n    "zip":       "902**",\n    "diagnosis": "J18",\n    "gender":    "F"\n  }]\n}\n\nnote: "ssn" key is absent entirely\n      remove_node() detached it from parent dict\noutput: 118 bytes`},
+ before:`mutated XMLTreeWrapper state:\n  name:      "ANON_7f3a2c91"\n  dob:       "1985"\n  ssn:       (absent)        (suppressed)\n  address:   (none)          (nullify produced <address/>)`,
+ after:`etree.tostring() unwraps XMLTreeWrapper → bytes:\n\n<?xml version='1.0' encoding='UTF-8'?>\n<patients>\n  <patient id="P001">\n    <name>ANON_ff8d9819</name>\n    <dob>1985</dob>\n  ...\n\noutput: beautifully masked generic format.`},
 
 {cat:'gray',sh:'Response',sub:'role-based output',
  title:'Response — role-tailored HTTP output',tech:'FastAPI · Response · Content-Type per format',mut:false,
  enters:['Output bytes (or raw bytes for operator)','Role string + conflict log + coverage log + k-anon report'],
  exits:['HTTP response body appropriate to role','Response headers for audit + correlation'],
- before:`three roles, three outputs from same pipeline run:\n\n  ANALYST  → masked body\n             no conflict details, no original values\n\n  OPERATOR → raw bytes (pipeline bypassed entirely)\n             audit log written BEFORE response sent\n             fails with HTTP 500 if audit write fails\n\n  AUDITOR  → labelled body:\n             name: [PSEUDONYMIZED]\n             dob:  [GENERALIZED: date level 2]\n             ssn:  [SUPPRESSED]\n             zip:  [GENERALIZED: zip level 2]\n             diagnosis: [GENERALIZED: icd10 level 1]\n             gender: [UNMASKED — NO RULE DEFINED]`,
- after:`HTTP/1.1 200 OK\nContent-Type: application/json\nX-Request-ID:         req_4f2a9c81\nX-Policy-Version:     1.0\nX-Role:               analyst\nX-Conflicts-Detected: 1\nX-Uncovered-Nodes:    1\nX-K-Anon-Satisfied:   false\n\n{\n  "patients": [{\n    "name":      "ANON_7f3a2c91",\n    "dob":       "*",\n    "zip":       "902**",\n    "diagnosis": "J18",\n    "gender":    "F"\n  }]\n}`},
+ before:`three roles, three outputs from same unified pipeline:\n\n  ANALYST  → universally masked body\n\n  OPERATOR → raw bytes (pipeline bypassed entirely)\n             audit log appended via file lock!\n\n  AUDITOR  → highly labelled body:\n             name: [WOULD APPLY: pseudonymize]\n             dob:  [WOULD APPLY: generalize | lvl=2]\n             ssn:  [WOULD APPLY: suppress]\n             (uncovered spaces tagged [UNMASKED])`,
+ after:`HTTP/1.1 200 OK\nContent-Type: application/xml\nx-request-id:         4f2a9c81...\nx-policy-version:     1.0\nx-role:               analyst\nx-conflict-count:     0\nx-uncovered-count:    0\nx-k-anonymity-achieved: true\n\n<?xml ...>\n<patients>\n...`},
 ];
 
 let cur=0;
