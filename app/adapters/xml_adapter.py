@@ -6,6 +6,7 @@ The pipeline never imports lxml directly.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any, Iterable, List
 
 from lxml import etree
@@ -13,6 +14,12 @@ from lxml import etree
 from app.adapters.base import FormatAdapter
 from app.exceptions import ParseError
 
+
+@dataclass
+class XMLAttributeNode:
+    """Represents an XML attribute so it can be passed around like an element."""
+    element: etree._Element
+    attr_name: str
 
 class XMLTreeWrapper:
     """Holds references to all lxml elements to keep proxies alive and id() stable."""
@@ -60,38 +67,59 @@ class XMLAdapter(FormatAdapter):
 
     # ── Tree traversal ────────────────────────────────────────────────────────
 
-    def iter_nodes(self, tree: XMLTreeWrapper) -> Iterable[etree._Element]:
-        """Yield every element in depth-first document order via lxml's iter."""
-        yield from tree.root.iter()
+    def iter_nodes(self, tree: XMLTreeWrapper) -> Iterable[Any]:
+        """Yield every element and its attributes in depth-first document order."""
+        for elem in tree.root.iter():
+            yield elem
+            for attr_name in elem.attrib:
+                yield XMLAttributeNode(elem, attr_name)
 
     # ── Node identity & value ─────────────────────────────────────────────────
 
-    def get_identity(self, node: etree._Element) -> int:
+    def get_identity(self, node: Any) -> int:
+        if isinstance(node, XMLAttributeNode):
+            return hash((id(node.element), node.attr_name))
         return id(node)
 
-    def get_value(self, node: etree._Element) -> Any:
-        """Return the element's text content (may be None)."""
+    def get_value(self, node: Any) -> Any:
+        """Return the element's text content or attribute value."""
+        if isinstance(node, XMLAttributeNode):
+            return node.element.get(node.attr_name)
         return node.text
 
-    def set_value(self, node: etree._Element, value: Any) -> None:
-        """Set the element's text.  *None* produces a self-closing tag."""
-        node.text = str(value) if value is not None else None
+    def set_value(self, node: Any, value: Any) -> None:
+        """Set the element's text or attribute. *None* produces a self-closing tag or drops attr."""
+        if isinstance(node, XMLAttributeNode):
+            if value is None:
+                node.element.attrib.pop(node.attr_name, None)
+            else:
+                node.element.set(node.attr_name, str(value))
+        else:
+            node.text = str(value) if value is not None else None
 
     # ── Attachment & removal ──────────────────────────────────────────────────
 
-    def remove_node(self, node: etree._Element) -> None:
+    def remove_node(self, node: Any) -> None:
+        if isinstance(node, XMLAttributeNode):
+            node.element.attrib.pop(node.attr_name, None)
+            return
         parent = node.getparent()
         if parent is not None:
             parent.remove(node)
         # Root node removal is a no-op (cannot detach the document root).
 
-    def is_attached(self, node: etree._Element) -> bool:
+    def is_attached(self, node: Any) -> bool:
         """Return True if *node* is reachable from the tree root.
 
         lxml children retain their parent reference even after the parent
         has been removed from the root, so we must walk the entire parent
         chain up to a node that has no parent and verify it is indeed the root.
         """
+        if isinstance(node, XMLAttributeNode):
+            if node.attr_name not in node.element.attrib:
+                return False
+            return self.is_attached(node.element)
+
         current = node
         while True:
             parent = current.getparent()
@@ -123,13 +151,22 @@ class XMLAdapter(FormatAdapter):
             # Invalid XPath — return empty list rather than crashing.
             return []
         # XPath can return text nodes (strings) as well as elements.
-        # We only care about element nodes that the pipeline can mutate.
-        return [r for r in results if isinstance(r, etree._Element)]
+        # We wrap attributes in XMLAttributeNode and only return mutatable nodes.
+        nodes = []
+        for r in results:
+            if isinstance(r, etree._Element):
+                nodes.append(r)
+            elif hasattr(r, 'is_attribute') and r.is_attribute:
+                nodes.append(XMLAttributeNode(r.getparent(), r.attrname))
+        return nodes
 
     # ── Path string ───────────────────────────────────────────────────────────
 
-    def get_path(self, node: etree._Element) -> str:
+    def get_path(self, node: Any) -> str:
         """Build a simple slash-separated path from the root to *node*."""
+        if isinstance(node, XMLAttributeNode):
+            return self.get_path(node.element) + f"/@{node.attr_name}"
+
         parts: List[str] = []
         current: etree._Element | None = node
         while current is not None:

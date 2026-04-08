@@ -4,6 +4,17 @@ record_root:
   - "//patient"
 
 rules:
+  # Pseudonymise ID deterministically across JSON, YAML, and XML
+  - selector: "$..id"
+    technique: pseudonymize
+    consistent: true
+  - selector: "//id"
+    technique: pseudonymize
+    consistent: true
+  - selector: "//@id"
+    technique: pseudonymize
+    consistent: true
+
   # Suppress SSN entirely
   - selector: "$..ssn"
     technique: suppress
