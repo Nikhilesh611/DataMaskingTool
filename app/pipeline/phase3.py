@@ -159,9 +159,6 @@ def apply_masking(
         Records nodes skipped (ancestor suppressed) and generalise / noise
         fallbacks, plus subtree bulk operation records.
     """
-    if role == "operator":
-        raise ValueError("Phase 3 must not run for the operator role.")
-
     _plan = scope_plan or ScopePlan()
     members = _plan.members
     coverage_log: CoverageLog = []
@@ -250,12 +247,12 @@ def apply_masking(
         rule = decision_index[node_id]
         node_path = adapter.get_path(node)
 
-        if role == "analyst":
-            _apply_technique(adapter, node, rule, coverage_log, node_path)
-        elif role == "auditor":
+        if role == "auditor":
             if _is_leaf(adapter, node):
                 label = _auditor_label(rule)
                 adapter.set_value(node, label)
+        else:
+            _apply_technique(adapter, node, rule, coverage_log, node_path)
 
     output_bytes = adapter.serialise(tree)
     return output_bytes, coverage_log

@@ -9,10 +9,10 @@ v2.0 additions
 * ``MaskingRule`` gains optional ``pattern`` field (mask_pattern only).
 * ``ProfileRule``   — a rule inside a named profile (selector is absolute).
 * ``MaskingProfile`` — named, reusable collection of ProfileRules.
-* ``RoleStrategy``  — per-role strategy for a scope.
-* ``ScopeRule``     — path-bounded subtree with profile + role strategies.
-* ``MaskingPolicy`` gains optional ``profiles`` and ``scopes`` dicts
-  (fully backward-compatible with v1.0 policies that omit them).
+* ``RoleDefinition`` — globally defines a role and its default fallback strategy.
+* ``RoleStrategy``  — per-role strategy for a scope (now contains `profile`).
+* ``ScopeRule``     — path-bounded subtree with role strategies.
+* ``MaskingPolicy`` gains ``roles`` dict for dynamic role registration.
 """
 
 from __future__ import annotations
@@ -123,7 +123,22 @@ class MaskingProfile(BaseModel):
     rules: List[ProfileRule] = Field(default_factory=list)
 
 
-# ── v2.0: Role strategy within a scope ───────────────────────────────────────
+# ── v3.0: Role Definition ─────────────────────────────────────────────────────
+
+class RoleDefinition(BaseModel):
+    """Defines a role globally and sets its default fallback strategy."""
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    default_fallback: Literal[
+        "masked",
+        "drop_subtree",
+        "default_allow",
+        "deep_redact",
+        "synthesize",
+    ] = "default_allow"
+
+
+# ── v3.0: Role strategy within a scope ───────────────────────────────────────
 
 class RoleStrategy(BaseModel):
     """Defines how a specific role is handled inside a scope.
@@ -149,22 +164,21 @@ class RoleStrategy(BaseModel):
         "deep_redact",
         "synthesize",
     ] = "masked"
+    profile: Optional[str] = None
 
 
-# ── v2.0: Scope rule ─────────────────────────────────────────────────────────
+# ── v3.0: Scope rule ─────────────────────────────────────────────────────────
 
 class ScopeRule(BaseModel):
-    """A path-bounded masking zone with its own profile and role strategies.
+    """A path-bounded masking zone with role strategies.
 
     ``path``          XPath or JSONPath selector identifying the subtree root(s).
-    ``apply_profile`` Name of a profile from ``MaskingPolicy.profiles``.
-    ``roles``         Maps role name (or ``"default"``) to ``RoleStrategy``.
+    ``roles``         Maps role name to ``RoleStrategy``.
     ``rules``         Inline rules merged with the profile's rules.
     """
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     path: str = Field(..., description="Selector identifying the subtree root(s).")
-    apply_profile: Optional[str] = None
     roles: Dict[str, RoleStrategy] = Field(default_factory=dict)
     rules: List[ProfileRule] = Field(default_factory=list)
 
@@ -190,7 +204,8 @@ class MaskingPolicy(BaseModel):
     rules: List[MaskingRule] = Field(default_factory=list)
     k_anonymity: Optional[KAnonConfig] = None
 
-    # v2.0 additions — fully backward compatible; both default to empty
+    # v3.0 additions
+    roles: Dict[str, RoleDefinition] = Field(default_factory=dict)
     profiles: Dict[str, MaskingProfile] = Field(default_factory=dict)
     scopes: List[ScopeRule] = Field(default_factory=list)
 
@@ -221,14 +236,22 @@ class MaskingPolicy(BaseModel):
                             f"Registered: {registered}."
                         )
 
-        # Validate profile references in scopes
+        # Validate profile references in scope role strategies and role existence
         for i, scope in enumerate(self.scopes):
-            if scope.apply_profile and scope.apply_profile not in self.profiles:
-                registered = sorted(self.profiles.keys())
-                raise ValueError(
-                    f"Scope {i} (path='{scope.path}'): apply_profile "
-                    f"'{scope.apply_profile}' is not defined in profiles. "
-                    f"Defined profiles: {registered}."
-                )
+            for role_name, role_strat in scope.roles.items():
+                if role_name != "default" and role_name not in self.roles:
+                    registered_roles = sorted(self.roles.keys())
+                    raise ValueError(
+                        f"Scope {i} (path='{scope.path}'): role '{role_name}' "
+                        f"is not defined in the top-level 'roles' registry. "
+                        f"Defined roles: {registered_roles}."
+                    )
+                if role_strat.profile and role_strat.profile not in self.profiles:
+                    registered = sorted(self.profiles.keys())
+                    raise ValueError(
+                        f"Scope {i} (path='{scope.path}'), role '{role_name}': "
+                        f"profile '{role_strat.profile}' is not defined in profiles. "
+                        f"Defined profiles: {registered}."
+                    )
 
         return self

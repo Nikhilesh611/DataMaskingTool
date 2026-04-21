@@ -1,0 +1,250 @@
+version: "3.0"
+
+record_root:
+  - "$.patients[*]"
+  - "//patient"
+
+roles:
+  analyst:
+    default_fallback: drop_subtree
+  auditor:
+    default_fallback: masked
+  operator:
+    default_fallback: default_allow
+  insurer:
+    default_fallback: drop_subtree
+
+profiles:
+  personal_pii:
+    rules:
+      - selector: "$..name"
+        technique: redact
+      - selector: "//name"
+        technique: redact
+      - selector: "$..dob"
+        technique: generalize
+        hierarchy: date
+        level: 2
+      - selector: "//dob"
+        technique: generalize
+        hierarchy: date
+        level: 2
+      - selector: "$..ssn"
+        technique: suppress
+      - selector: "//ssn"
+        technique: suppress
+      - selector: "$..email"
+        technique: pseudonymize
+        consistent: true
+      - selector: "//email"
+        technique: pseudonymize
+        consistent: true
+      - selector: "$..phone"
+        technique: redact
+      - selector: "//phone"
+        technique: redact
+
+  address_mask:
+    rules:
+      - selector: "$..street"
+        technique: mask_pattern
+        pattern: "[STREET REDACTED]"
+      - selector: "//street"
+        technique: mask_pattern
+        pattern: "[STREET REDACTED]"
+      - selector: "$..city"
+        technique: redact
+      - selector: "//city"
+        technique: redact
+      - selector: "$..zip"
+        technique: generalize
+        hierarchy: zipcode
+        level: 2
+      - selector: "//zip"
+        technique: generalize
+        hierarchy: zipcode
+        level: 2
+
+  card_data:
+    rules:
+      - selector: "$..card_number"
+        technique: mask_pattern
+        pattern: "****-****-****-{last4}"
+      - selector: "//card_number"
+        technique: mask_pattern
+        pattern: "****-****-****-{last4}"
+      - selector: "$..cvv"
+        technique: suppress
+      - selector: "//cvv"
+        technique: suppress
+      - selector: "$..amount"
+        technique: noise
+      - selector: "//amount"
+        technique: noise
+
+  medical_mask:
+    rules:
+      - selector: "$..diagnosis"
+        technique: generalize
+        hierarchy: icd10
+        level: 1
+      - selector: "//diagnosis"
+        technique: generalize
+        hierarchy: icd10
+        level: 1
+      - selector: "$..bloodpressure"
+        technique: noise
+      - selector: "//bloodpressure"
+        technique: noise
+        
+  insurer_billing:
+    rules:
+      - selector: "$..cvv"
+        technique: suppress
+      - selector: "//cvv"
+        technique: suppress
+      - selector: "$..amount"
+        technique: noise
+      - selector: "//amount"
+        technique: noise
+
+scopes:
+  - path: "$.patients[*].personal_info"
+    roles:
+      analyst:
+        strategy: masked
+        profile: personal_pii
+      auditor:
+        strategy: masked
+        profile: personal_pii
+      operator:
+        strategy: default_allow
+      default:
+        strategy: masked
+        profile: personal_pii
+
+  - path: "//personal_info"
+    roles:
+      analyst:
+        strategy: masked
+        profile: personal_pii
+      auditor:
+        strategy: masked
+        profile: personal_pii
+      operator:
+        strategy: default_allow
+      default:
+        strategy: masked
+        profile: personal_pii
+
+  - path: "$.patients[*].personal_info.contact.address"
+    roles:
+      analyst:
+        strategy: synthesize
+      auditor:
+        strategy: masked
+        profile: address_mask
+      default:
+        strategy: drop_subtree
+
+  - path: "//address"
+    roles:
+      analyst:
+        strategy: synthesize
+      auditor:
+        strategy: masked
+        profile: address_mask
+      default:
+        strategy: drop_subtree
+
+  - path: "$.patients[*].medical_history"
+    roles:
+      analyst:
+        strategy: masked
+        profile: medical_mask
+      auditor:
+        strategy: masked
+        profile: medical_mask
+      default:
+        strategy: drop_subtree
+
+  - path: "//medical_history"
+    roles:
+      analyst:
+        strategy: masked
+        profile: medical_mask
+      auditor:
+        strategy: masked
+        profile: medical_mask
+      default:
+        strategy: drop_subtree
+
+  - path: "$.patients[*].medical_history.clinical_notes"
+    roles:
+      analyst:
+        strategy: deep_redact
+      auditor:
+        strategy: deep_redact
+      default:
+        strategy: drop_subtree
+
+  - path: "//clinical_notes"
+    roles:
+      analyst:
+        strategy: deep_redact
+      auditor:
+        strategy: deep_redact
+      default:
+        strategy: drop_subtree
+
+  - path: "$.patients[*].billing"
+    roles:
+      analyst:
+        strategy: drop_subtree
+      auditor:
+        strategy: masked
+        profile: card_data
+      insurer:
+        strategy: masked
+        profile: insurer_billing
+      default:
+        strategy: drop_subtree
+
+  - path: "//billing"
+    roles:
+      analyst:
+        strategy: drop_subtree
+      auditor:
+        strategy: masked
+        profile: card_data
+      insurer:
+        strategy: masked
+        profile: insurer_billing
+      default:
+        strategy: drop_subtree
+
+  - path: "$.patients[*].assigned_doctor"
+    roles:
+      default:
+        strategy: default_allow
+
+  - path: "//assigned_doctor"
+    roles:
+      default:
+        strategy: default_allow
+
+rules:
+  - selector: "$..patient_id"
+    technique: pseudonymize
+    consistent: true
+
+  - selector: "//@id"
+    technique: pseudonymize
+    consistent: true
+
+k_anonymity:
+  enabled: true
+  k: 2
+  quasi_identifiers:
+    - "$..dob"
+    - ".//dob"

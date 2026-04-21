@@ -119,27 +119,32 @@ def evaluate_scopes(
             continue
 
         # ── 2. Resolve strategy for this role ──────────────────────────────
-        role_strat = scope_rule.roles.get(role) or scope_rule.roles.get("default")
-        strategy = role_strat.strategy if role_strat else "default_allow"
+        role_strat = scope_rule.roles.get(role)
+        if role_strat:
+            strategy = role_strat.strategy
+            apply_profile = role_strat.profile
+        else:
+            default_strat = scope_rule.roles.get("default")
+            if default_strat:
+                strategy = default_strat.strategy
+                apply_profile = default_strat.profile
+            else:
+                role_def = policy.roles.get(role)
+                strategy = role_def.default_fallback if role_def else "default_allow"
+                apply_profile = None
 
         # ── 3. Expand profile rules into full MaskingRule objects ───────────
         expanded_rules: List[MaskingRule] = []
         profile_name: Optional[str] = None
 
-        if scope_rule.apply_profile:
-            profile = policy.profiles.get(scope_rule.apply_profile)
+        if apply_profile:
+            profile = policy.profiles.get(apply_profile)
             if profile:
-                profile_name = scope_rule.apply_profile
+                profile_name = apply_profile
                 for prof_rule in profile.rules:
                     mr = prof_rule.to_masking_rule()
                     expanded_rules.append(mr)
                     plan.expansion_rule_ids.add(id(mr))
-
-        # Merge inline scope rules (appended after profile rules)
-        for inline_rule in scope_rule.rules:
-            mr = inline_rule.to_masking_rule()
-            expanded_rules.append(mr)
-            plan.expansion_rule_ids.add(id(mr))
 
         # ── 4. Build the ScopeDecision ──────────────────────────────────────
         decision = ScopeDecision(

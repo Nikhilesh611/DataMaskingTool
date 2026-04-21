@@ -27,9 +27,7 @@ from typing import Dict, Optional, Protocol
 from fastapi import Header
 
 from app.exceptions import AuthenticationError, AuthorizationError
-
-# Roles that the pipeline recognises.  Any other value is rejected early.
-_KNOWN_ROLES = frozenset({"analyst", "auditor", "operator"})
+from app.policy.loader import get_policy
 
 
 # ── Token store protocol ──────────────────────────────────────────────────────
@@ -113,10 +111,16 @@ def resolve_role(*allowed_roles: str):
         # ── Priority 1: simple role header ───────────────────────────────────
         if x_masking_role:
             role = x_masking_role.lower().strip()
-            if role not in _KNOWN_ROLES:
+            
+            try:
+                known_roles = set(get_policy().roles.keys())
+            except RuntimeError:
+                known_roles = set()
+                
+            if role not in known_roles:
                 raise AuthenticationError(
                     f"Unknown role '{role}' in X-Masking-Role. "
-                    f"Valid roles: {sorted(_KNOWN_ROLES)}."
+                    f"Valid roles: {sorted(known_roles)}."
                 )
             if allowed_roles and role not in allowed_roles:
                 raise AuthorizationError(role=role, endpoint="this endpoint")
