@@ -1,0 +1,115 @@
+{
+  "patients": [
+    {
+      "patient_id": "P001",
+      "personal_info": {
+        "name": "Alice Johnson",
+        "dob": "1985-07-23",
+        "ssn": "123-45-6789",
+        "contact": {
+          "email": "alice@example.com",
+          "phone": "555-100-2001",
+          "address": {
+            "street": "123 Main St",
+            "city": "New York",
+            "zip": "10001"
+          }
+        }
+      },
+      "medical_history": {
+        "diagnosis": "J18.9",
+        "bloodpressure": "120.5",
+        "clinical_notes": {
+          "admission_note": "Patient presented with severe chest pain and shortness of breath.",
+          "progress_note": "Day 2: Patient stable, responding well to medication and rest.",
+          "discharge_summary": "Discharged after 3 days. Follow-up appointment in 2 weeks."
+        }
+      },
+      "billing": {
+        "card_number": "4111-1111-1111-1234",
+        "cvv": "123",
+        "amount": "450.00",
+        "plan": "Gold"
+      },
+      "assigned_doctor": {
+        "doctor_id": "DOC-104",
+        "name": "Dr. John Smith",
+        "department": "Cardiology"
+      }
+    },
+    {
+      "patient_id": "P002",
+      "personal_info": {
+        "name": "Bob Williams",
+        "dob": "1972-03-14",
+        "ssn": "987-65-4321",
+        "contact": {
+          "email": "bob@example.com",
+          "phone": "555-200-3002",
+          "address": {
+            "street": "456 Oak Avenue",
+            "city": "Chicago",
+            "zip": "60601"
+          }
+        }
+      },
+      "medical_history": {
+        "diagnosis": "E11.9",
+        "bloodpressure": "138.0",
+        "clinical_notes": {
+          "admission_note": "Type 2 diabetic. Presented for routine insulin adjustment.",
+          "progress_note": "Day 1: Blood glucose levels stabilised after insulin dosage change.",
+          "discharge_summary": "Discharged same day. Weight management program enrolled."
+        }
+      },
+      "billing": {
+        "card_number": "5500-0000-0000-0004",
+        "cvv": "456",
+        "amount": "1200.50",
+        "plan": "Platinum"
+      },
+      "assigned_doctor": {
+        "doctor_id": "DOC-205",
+        "name": "Dr. Sarah Lee",
+        "department": "Endocrinology"
+      }
+    },
+    {
+      "patient_id": "P003",
+      "personal_info": {
+        "name": "Carol Davis",
+        "dob": "1990-11-05",
+        "ssn": "555-12-3456",
+        "contact": {
+          "email": "carol@example.com",
+          "phone": "555-300-4003",
+          "address": {
+            "street": "789 Pine Road",
+            "city": "Houston",
+            "zip": "77001"
+          }
+        }
+      },
+      "medical_history": {
+        "diagnosis": "I10",
+        "bloodpressure": "145.2",
+        "clinical_notes": {
+          "admission_note": "Primary hypertension, elevated readings for past 3 months.",
+          "progress_note": "Medication adjusted. BP reduced to 130/85 by day 2.",
+          "discharge_summary": "Stable. Continue daily medication. Review in 1 month."
+        }
+      },
+      "billing": {
+        "card_number": "3714-496353-98431",
+        "cvv": "789",
+        "amount": "300.00",
+        "plan": "Silver"
+      },
+      "assigned_doctor": {
+        "doctor_id": "DOC-304",
+        "name": "Dr. James Park",
+        "department": "General Medicine"
+      }
+    }
+  ]
+}

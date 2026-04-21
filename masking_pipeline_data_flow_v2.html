@@ -1,0 +1,646 @@
+
+<h2 style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)">Data Masking Pipeline v2.0 — 14-stage interactive data flow with subtree scoping, reusable profiles, and role-based strategies</h2>
+<style>
+*{box-sizing:border-box}
+.pw{padding:12px 0 20px;font-family:var(--font-sans,sans-serif)}
+.vbanner{display:flex;align-items:center;gap:10px;padding:8px 14px;border-radius:8px;margin-bottom:14px;border:1px solid}
+.vbtag{font-size:10px;font-weight:600;padding:2px 8px;border-radius:4px;letter-spacing:.05em}
+.vbtitle{font-size:12px;font-weight:500}
+.vbsub{font-size:10px;opacity:.7;margin-top:1px}
+.strip{display:flex;align-items:flex-start;gap:0;overflow-x:auto;padding:0 0 10px;scrollbar-width:thin}
+.sbox{flex-shrink:0;width:56px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px;padding:2px 0;transition:opacity .1s}
+.sbox:hover{opacity:.8}
+.snum{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;border:1.5px solid;transition:all .12s;flex-shrink:0}
+.slbl{font-size:9px;text-align:center;line-height:1.25;color:var(--color-text-tertiary);max-width:54px}
+.sarr{flex-shrink:0;width:12px;height:32px;display:flex;align-items:center;justify-content:center;color:var(--color-text-tertiary);font-size:11px;padding-bottom:18px}
+.dp{border:1px solid var(--color-border-tertiary);border-radius:10px;overflow:hidden;margin-top:2px}
+.dph{padding:11px 14px 9px;border-bottom:1px solid var(--color-border-tertiary);display:flex;align-items:flex-start;gap:10px}
+.dpbadge{padding:3px 8px;border-radius:20px;font-size:10px;font-weight:500;white-space:nowrap;flex-shrink:0;margin-top:1px}
+.dpnew{padding:2px 6px;border-radius:4px;font-size:9px;font-weight:600;letter-spacing:.06em;margin-left:6px;vertical-align:middle}
+.dptitle{font-size:14px;font-weight:500;color:var(--color-text-primary);margin:0 0 2px}
+.dptech{font-size:11px;color:var(--color-text-tertiary);margin:0;font-family:var(--font-mono,monospace)}
+.dpbody{display:grid;grid-template-columns:1fr 1fr;gap:0}
+@media(max-width:500px){.dpbody{grid-template-columns:1fr}}
+.dpcol{padding:11px 14px}
+.dpcol:first-child{border-right:1px solid var(--color-border-tertiary)}
+.ch{font-size:9px;font-weight:500;text-transform:uppercase;letter-spacing:.06em;color:var(--color-text-tertiary);margin:0 0 7px}
+.dlist{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:5px}
+.dli{display:flex;gap:6px;font-size:11px;color:var(--color-text-secondary);line-height:1.45}
+.ddot{width:4px;height:4px;border-radius:50%;margin-top:5px;flex-shrink:0}
+.pre{background:var(--color-background-secondary);border:1px solid var(--color-border-tertiary);border-radius:6px;padding:8px 10px;font-size:10px;font-family:var(--font-mono,monospace);white-space:pre;overflow-x:auto;line-height:1.6;color:var(--color-text-primary);margin:8px 0 0}
+.mbadge{display:inline-block;padding:2px 7px;border-radius:4px;font-size:9px;font-weight:500;margin-bottom:9px}
+.nav{display:flex;align-items:center;justify-content:space-between;padding:8px 0 0}
+.nb{background:var(--color-background-secondary);border:1px solid var(--color-border-tertiary);border-radius:6px;padding:5px 12px;font-size:11px;cursor:pointer;color:var(--color-text-secondary)}
+.nb:hover{background:var(--color-background-tertiary)}
+.nb:disabled{opacity:.3;cursor:default}
+.dots{display:flex;gap:5px;align-items:center}
+.d2{width:5px;height:5px;border-radius:50%;background:var(--color-border-secondary);transition:all .1s}
+.d2.a{background:var(--color-text-secondary);width:7px;height:7px}
+</style>
+<div class="pw">
+
+<div class="vbanner" id="vbanner">
+  <div>
+    <div style="display:flex;align-items:center;gap:8px">
+      <span class="vbtag" id="vbtag">v 2.0</span>
+      <span class="vbtitle">Data Masking Pipeline — Architecture v2.0</span>
+    </div>
+    <div class="vbsub">Adds: X-Masking-Role header · Scoped Subtrees · Reusable Profiles · Role-Based Strategies · Synthetic Replacement · Deep Redact</div>
+  </div>
+</div>
+
+<div class="strip" id="strip"></div>
+<div class="dp" id="dp"></div>
+<div class="nav">
+  <button class="nb" id="bp" onclick="mv(-1)">← Prev</button>
+  <div class="dots" id="dots"></div>
+  <button class="nb" id="bn" onclick="mv(1)">Next →</button>
+</div>
+</div>
+<script>
+const dk = matchMedia('(prefers-color-scheme:dark)').matches;
+const C = {
+  gray:   dk?{bg:'#2C2C2A',bd:'#888780',tx:'#D3D1C7'}:{bg:'#F1EFE8',bd:'#5F5E5A',tx:'#444441'},
+  blue:   dk?{bg:'#042C53',bd:'#378ADD',tx:'#B5D4F4'}:{bg:'#E6F1FB',bd:'#185FA5',tx:'#0C447C'},
+  teal:   dk?{bg:'#04342C',bd:'#1D9E75',tx:'#9FE1CB'}:{bg:'#E1F5EE',bd:'#0F6E56',tx:'#085041'},
+  purp:   dk?{bg:'#26215C',bd:'#7F77DD',tx:'#CECBF6'}:{bg:'#EEEDFE',bd:'#534AB7',tx:'#3C3489'},
+  coral:  dk?{bg:'#4A1B0C',bd:'#D85A30',tx:'#F5C4B3'}:{bg:'#FAECE7',bd:'#993C1D',tx:'#712B13'},
+  amber:  dk?{bg:'#3D2800',bd:'#C47F00',tx:'#FFD97D'}:{bg:'#FFF8E1',bd:'#8A5A00',tx:'#5C3A00'},
+  rose:   dk?{bg:'#3B0A1E',bd:'#C2436A',tx:'#F7B8CE'}:{bg:'#FDE8EF',bd:'#922040',tx:'#6B1230'},
+  indigo: dk?{bg:'#0F1A40',bd:'#5B7FD4',tx:'#C0CFFA'}:{bg:'#EEF2FF',bd:'#3452A4',tx:'#1E3480'},
+};
+
+// Colour the version banner
+const bn=document.getElementById('vbanner');
+const bt=document.getElementById('vbtag');
+bn.style.background=C.indigo.bg; bn.style.borderColor=C.indigo.bd;
+bt.style.background=C.indigo.bd; bt.style.color=(dk?C.indigo.bg:'#fff');
+bn.querySelector('.vbtitle').style.color=C.indigo.tx;
+bn.querySelector('.vbsub').style.color=C.indigo.tx;
+
+const NEW_TAG=`<span class="dpnew" style="background:${C.amber.bd};color:${dk?C.amber.bg:'#fff'}">NEW</span>`;
+const UPD_TAG=`<span class="dpnew" style="background:${C.teal.bd};color:${dk?C.teal.bg:'#fff'}">UPDATED</span>`;
+
+const S=[
+/* 0 */
+{cat:'gray',sh:'Client',sub:'request origin',isNew:false,isUpd:true,
+ title:'Client — HTTP Request',tech:'HTTP client · any language or tool',mut:false,
+ enters:['User sends a filename and an identity header','Carries X-Masking-Role header instead of full JWT for now','Has no direct access to underlying files'],
+ exits:['POST /mask with JSON body containing filename','X-Masking-Role header consumed by the middleware role resolver'],
+ before:`POST /mask HTTP/1.1
+Host: masking-api:8000
+X-Masking-Role: analyst
+Content-Type: application/json
+
+{ "filename": "sample.xml" }`,
+ after:`No JWT validation required at this stage.
+Role is read directly from the header.
+
+Available roles (defined in policy.yaml v2.0):
+  analyst  → scoped + profile-based masking
+  auditor  → labelled dry-run output
+  operator → raw passthrough + audit log
+  default  → strictest fallback strategy`},
+
+/* 1 */
+{cat:'blue',sh:'Role Resolve',sub:'header extraction',isNew:false,isUpd:true,
+ title:'Role Resolver — Simple Header Extraction',tech:'Python · FastAPI · Request.headers · no JWT decoding',mut:false,
+ enters:['Raw HTTP request','X-Masking-Role header value (plain string)'],
+ exits:['Resolved role string → injected into masking context dict','HTTP 400 if header is absent and no default is configured'],
+ before:`X-Masking-Role: analyst
+
+No cryptographic verification at this stage.
+Trust boundary = the internal network / API gateway.
+
+Replaces the old token-store lookup with a direct
+header read — simpler, stateless, and faster.`,
+ after:`context = {
+  "role": "analyst"
+}
+
+This context dict is threaded through every
+subsequent stage. The masking engine NEVER
+reads HTTP headers directly — it only sees
+the resolved context dict. Clean separation.
+
+Future upgrade path:
+  → swap header read for JWT claim extraction
+  → context dict interface stays identical`},
+
+/* 2 */
+{cat:'gray',sh:'Policy v2',sub:'startup / global',isNew:false,isUpd:true,
+ title:'Policy Reader v2 — Profiles + Scopes + Global Rules',tech:'Python · Pydantic v2 · profiles registry · scope compiler',mut:false,
+ enters:['POLICY_PATH from .env (./policy.yaml)','Raw YAML bytes — now includes profiles: and scopes: blocks'],
+ exits:['Immutable MaskingPolicy v2 object pinned in app.state','Pre-compiled ProfileRegistry and ScopeMap ready for O(1) lookup'],
+ before:`policy.yaml v2.0 structure:
+
+version: "2.0"
+
+profiles:               # ← NEW reusable mini-policies
+  person_pii:
+    rules:
+      - selector: "name"
+        technique: redact
+      - selector: "dob"
+        technique: generalize
+        level: 2
+  financial_card:
+    rules:
+      - selector: "card_number"
+        technique: mask_pattern
+        pattern: "****-****-****-{last4}"
+
+scopes:                 # ← NEW subtree boundaries
+  - path: "$.billing"
+    apply_profile: "financial_card"
+    roles:
+      analyst:  {strategy: masked}
+      auditor:  {strategy: masked}
+      default:  {strategy: drop_subtree}
+
+rules:                  # Global element-level rules (v1 compat)
+  - selector: "$..ssn"
+    technique: suppress`,
+ after:`MaskingPolicy v2 (Pydantic):
+  .profiles   → ProfileRegistry dict
+  .scopes      → List[ScopeRule] (compiled paths)
+  .global_rules → List[Rule] (unchanged from v1)
+
+ProfileRegistry["person_pii"].rules → [redact(name), generalize(dob)]
+ProfileRegistry["financial_card"].rules → [mask_pattern(card_number)]
+
+ScopeMap["$.billing"] →
+  profile_ref: "financial_card"
+  role_strategies:
+    analyst → masked
+    auditor → masked
+    default → drop_subtree
+
+DISK IS NEVER HIT AGAIN after startup.`},
+
+/* 3 */
+{cat:'gray',sh:'File Reader',sub:'secure disk I/O',isNew:false,isUpd:false,
+ title:'File Reader — Secure File Access',tech:'Python · pathlib · os.path.realpath()',mut:false,
+ enters:['Filename string from request body','Base directory from environment variable'],
+ exits:['Raw file bytes (unparsed)','Format hint string derived from file extension'],
+ before:`filename  = "sample.xml"
+base_dir  = "/data"
+
+security checks:
+  resolve absolute path
+  verify stays inside base_dir
+  reject ../ traversal → HTTP 403
+  reject unknown extension → HTTP 400`,
+ after:`resolved: /data/sample.xml  ✓
+extension: .xml → format = "xml"
+
+format registry:
+  .xml  → XMLAdapter  (lxml)
+  .json → JSONAdapter (json + jsonpath-ng)
+  .yaml → YAMLAdapter (pyyaml + jsonpath-ng)
+
+returns: raw bytes, format="xml"
+Unchanged from v1.`},
+
+/* 4 */
+{cat:'teal',sh:'Adapter',sub:'format → node tree',isNew:false,isUpd:false,
+ title:'Format Adapter — Parse to Unified Node Tree',tech:'JSONAdapter: NodeWrapper · XMLAdapter: XMLTreeWrapper',mut:false,
+ enters:['Raw bytes in any supported format','Format string selecting the adapter'],
+ exits:['Unified NodeWrapper tree (JSON/YAML) or XMLTreeWrapper (XML)','Stable node identities preserved to prevent GC bugs'],
+ before:`raw bytes:
+<patients>
+  <patient>
+    <name>Alice Johnson</name>
+    <billing>
+      <card_number>4111-1111-1111-1234</card_number>
+    </billing>
+  ...
+</patients>`,
+ after:`XMLTreeWrapper (XML):
+  Snapshot of list(root.iter()) keeps lxml proxies alive.
+  id(node) is stable for all 3 pipeline phases.
+
+NodeWrapper (JSON/YAML):
+  eq=False prevents infinite equality recursion.
+  Wraps dicts/lists with a stable Python object id().
+
+Unchanged from v1 — the adapter layer is
+intentionally format-agnostic and scope-unaware.
+Scope evaluation happens in Phase 0 (new).`},
+
+/* 5 */
+{cat:'amber',sh:'Phase 0',sub:'scope + profile eval',isNew:true,isUpd:false,
+ title:'Phase 0 — Scope Evaluation & Profile Expansion ★ NEW',tech:'Python · adapter.select() · ProfileRegistry · ScopeMap · context dict',mut:false,
+ enters:['Intact node tree (zero mutations)','Compiled ScopeMap from policy v2','ProfileRegistry of named mini-policies','context = {"role": "analyst"}'],
+ exits:['scope_plan: subtree root node → resolved strategy + expanded rules','Subtrees marked for drop_subtree are flagged BEFORE Phase 1 runs','Global rules list unchanged — passed straight to Phase 1'],
+ before:`ScopeMap has 2 entries:
+  scope A: path="$.billing"
+    profile: "financial_card"
+    role_strategies:
+      analyst → masked
+      default → drop_subtree
+
+  scope B: path="$.medical_history"
+    profile: "person_pii"
+    (no role_strategies → default_allow for all roles)
+
+context["role"] = "analyst"`,
+ after:`Step 1 — Resolve strategy per scope per role:
+  scope A ($.billing):
+    role=analyst → strategy=masked
+    expand profile "financial_card" rules into scope_plan
+
+  scope B ($.medical_history):
+    role=analyst → no role override → default_allow
+    profile "person_pii" rules → appended to scope_plan
+
+Step 2 — Select subtree root nodes:
+  billing_node  → id(billing_node) flagged: strategy=masked
+                   rules: [mask_pattern(card_number)]
+  med_hist_node → id(med_hist_node) flagged: strategy=allow
+                   rules: [redact(name), generalize(dob)]
+
+scope_plan = {
+  id(billing_node):   {strategy:"masked",  rules:[...]},
+  id(med_hist_node):  {strategy:"allow",   rules:[...]},
+}
+
+TREE IS COMPLETELY UNCHANGED`},
+
+/* 6 */
+{cat:'purp',sh:'Phase 1',sub:'index building',isNew:false,isUpd:true,
+ title:'Phase 1 — Index Building (Scope-Aware)',tech:'Python · adapter.select() · adapter.iter_nodes() · scope_plan',mut:false,
+ enters:['Intact node tree','Universal global rules (XPath + JSONPath)','scope_plan from Phase 0'],
+ exits:['rule_index: node id → list of matching rules','coverage_index: nodes with no matching rule','Nodes inside a drop_subtree scope are excluded from indexing entirely'],
+ before:`Global rules evaluated first:
+  $..ssn   → [ssn_node]
+  //ssn    → [] (XML already matched above or
+                  JSON/XML adapter swallows SyntaxError)
+
+Scope-expanded rules evaluated next,
+ONLY within the subtree boundary:
+  $.billing → card_number node (inside billing subtree)
+  card_number rule = mask_pattern from "financial_card" profile
+
+Nodes inside a drop_subtree scope skipped:
+  if context role for scope = drop_subtree
+  → NONE of billing's child nodes are indexed`,
+ after:`rule_index:
+  id(ssn_node)         → [suppress]
+  id(name_node)        → [redact]          ← from person_pii
+  id(dob_node)         → [generalize:2]    ← from person_pii
+  id(card_number_node) → [mask_pattern]    ← from financial_card
+
+coverage_index:
+  /patients/patient/gender → uncovered
+
+TREE IS COMPLETELY UNCHANGED`},
+
+/* 7 */
+{cat:'purp',sh:'Phase 2',sub:'conflict resolution',isNew:false,isUpd:false,
+ title:'Phase 2 — Conflict Resolution (Zero Mutations)',tech:'Python · specificity scorer · document order tiebreak',mut:false,
+ enters:['rule_index with competing rule lists','Policy rule list for document-order tiebreak'],
+ exits:['decision_index: node id → exactly one winning rule','Full conflict_log stored for auditor role'],
+ before:`conflict at id(name_node):
+  rule A  selector: "//name"
+          specificity: 10 (explicit field × 10pts)
+  rule B  selector: "//*"
+          specificity:  0 (wildcard)
+
+Profile-expanded rules carry their own specificity.
+A rule from a scope profile gets a scope_bonus: +5
+to prefer scoped rules over global wildcards.`,
+ after:`decision_index:
+  id(ssn_node)         → suppress            ✓
+  id(name_node)        → redact              ✓ (scope bonus wins)
+  id(dob_node)         → generalize:date:2   ✓
+  id(card_number_node) → mask_pattern        ✓
+
+conflict_log: 1 entry
+  node: "/patients/patient/name"
+  winner: //name (score 15 with scope_bonus)
+  loser:  //* (score 0)
+
+TREE STILL COMPLETELY UNCHANGED`},
+
+/* 8 */
+{cat:'purp',sh:'Phase 3',sub:'★ masking loop',isNew:false,isUpd:true,
+ title:'Phase 3 — Masking Loop ★ First Mutations (Scope-Aware)',tech:'Python · adapter.set_value() · adapter.remove_node() · scope_plan · new techniques',mut:true,
+ enters:['Tree wrapper (intact — phases 0-2 never mutated it)','decision_index','scope_plan (contains drop_subtree flags)','context = {"role": "..."}'],
+ exits:['Mutated node tree — values replaced, nodes removed, or entire subtrees dropped/synthesized','coverage_log'],
+ before:`Masking loop now has 4 branches per node:
+
+  1. Node inside a drop_subtree scope?
+     → adapter.remove_node(subtree_root)
+     → skip all children (they no longer exist)
+
+  2. Node inside a synthesize scope?
+     → replace entire subtree with synthetic object
+     → skip all children
+
+  3. Node in decision_index?
+     → apply winning technique
+
+  4. Node in coverage_index?
+     → check role:
+        analyst → leave unchanged
+        auditor → label [UNMASKED — NO RULE]`,
+ after:`MUTATIONS APPLIED (analyst role):
+
+  billing_node:
+    strategy = drop_subtree (analyst + no billing access)
+    → adapter.remove_node(billing_node)
+    → card_number never visited
+
+  name:      "Alice Johnson" → "ANON_7f3a2c91"
+             redact from person_pii profile
+
+  dob:       "1985-03-15"   → "1985"
+             generalize:date:2 from person_pii profile
+
+  ssn:       "123-45-..."   → (node detached)
+             suppress from global rule
+
+  address:   (entire subtree)
+             strategy = synthesize (if configured)
+             → {"street":"[SYNTHETIC]","city":"[SYNTHETIC]"}
+
+NEW techniques available in v2.0:
+  ★ deep_redact   → traverse subtree, redact every leaf
+  ★ synthesize    → replace subtree with structurally
+                     identical synthetic object
+  ★ prune         → remove subtree entirely
+  ★ mask_pattern  → partial reveal (e.g. last 4 digits)`},
+
+/* 9 */
+{cat:'rose',sh:'Subtree Ops',sub:'new v2.0 engine',isNew:true,isUpd:false,
+ title:'Subtree Operation Engine ★ NEW — Deep Redact / Synthesize / Prune',tech:'Python · adapter.iter_subtree() · SyntheticFactory · recursive leaf walker',mut:true,
+ enters:['Subtree root node flagged by scope_plan','Operation type: deep_redact | synthesize | prune','context dict (role, request metadata)'],
+ exits:['Mutated or removed subtree — logged separately from element-level mutations','synthetic_log or prune_log appended for audit trail'],
+ before:`Three new subtree-level operations:
+
+  PRUNE (drop_subtree strategy):
+    Cleanest option. Entire node and all children
+    removed from the tree.  No data escapes.
+    adapter.remove_node(subtree_root) called once.
+
+  DEEP REDACT:
+    Structure preserved. Engine walks every leaf
+    in the subtree via adapter.iter_subtree().
+    Every string/numeric leaf → redacted value.
+    Useful for free-text notes, developer logs, etc.
+
+  SYNTHESIZE:
+    Engine reads the SHAPE of the subtree
+    (keys + value types) and generates a
+    structurally identical but purely fake object.
+    SyntheticFactory uses field-name heuristics:
+      "street" → random street name
+      "amount" → random float in plausible range
+      "email"  → random@synthetic.invalid`,
+ after:`Prune example:
+  BEFORE: {"billing": {"card": "4111...", "cvv": "123"}}
+  AFTER:  {}  ← billing key gone entirely
+
+Deep Redact example:
+  BEFORE: {"notes": {"summary": "Patient complained...",
+                      "flags": ["urgent", "sensitive"]}}
+  AFTER:  {"notes": {"summary": "[REDACTED]",
+                      "flags": ["[REDACTED]","[REDACTED]"]}}
+
+Synthesize example:
+  BEFORE: {"address": {"street": "123 Main St",
+                        "city": "Chicago", "zip": "60601"}}
+  AFTER:  {"address": {"street": "742 Evergreen Ter",
+                        "city": "Springfield","zip": "00000"}}
+
+All operations appended to audit_log with:
+  subtree_path, operation, role, timestamp`},
+
+/* 10 */
+{cat:'coral',sh:'k-Anon',sub:'global privacy',isNew:false,isUpd:true,
+ title:'k-Anonymity Engine ★ Scope-Aware QI Extraction',tech:'Python · adapter.select() · equivalence class grouping · iterative generalisation',mut:true,
+ enters:['Mutated tree from Phase 3 (pruned subtrees already absent)','k-anon config: record-roots + universal QI-selectors','scope_plan (to skip QIs inside pruned scopes)'],
+ exits:['Further mutated tree (QI nodes updated if violations found)','k-anon report: satisfied bool + violating class details'],
+ before:`QI extraction is now scope-aware.
+If a QI path falls inside a pruned subtree,
+those nodes no longer exist in the tree →
+k-anon engine simply gets an empty result set
+for that QI and skips it gracefully.
+
+record_root = ["$.patients[*]", "//patient"]
+qi_selectors = ["$..dob", ".//dob",
+                "$..zipcode", ".//zipcode"]`,
+ after:`Extraction result (after prune of billing subtree):
+  dob     → 3 values found  ✓
+  zipcode → 3 values found  ✓
+  card_number → 0 values    (pruned — not a QI anyway)
+
+k-anon iteration:
+  class {dob:"1985", zip:"60601"} → size 1 → violation
+  generalise dob → "1980s"
+  re-check → size 1 → generalise → "*"
+
+k-anon report:
+  satisfied: false
+  violating_classes: 1
+  x-k-anonymity-achieved: false header set`},
+
+/* 11 */
+{cat:'teal',sh:'Serialise',sub:'tree → format',isNew:false,isUpd:false,
+ title:'Format Adapter — Serialise Back to Original Format',tech:'json.dumps() · etree.tostring() · yaml.dump() — same adapter instance, reverse direction',mut:false,
+ enters:['Fully mutated node tree (pruned subtrees absent, synthetic replacements in place)','Original format string'],
+ exits:['Output bytes in original file format','Ready to attach to HTTP response body'],
+ before:`mutated XMLTreeWrapper state:
+  name:        "ANON_7f3a2c91"
+  dob:         "1980s"
+  ssn:         (absent — suppressed)
+  billing:     (absent — pruned by scope strategy)
+  address:     (synthetic object)`,
+ after:`etree.tostring() unwraps XMLTreeWrapper → bytes:
+
+<?xml version='1.0' encoding='UTF-8'?>
+<patients>
+  <patient id="P001">
+    <name>ANON_ff8d9819</name>
+    <dob>1980s</dob>
+    <address>
+      <street>742 Evergreen Ter</street>
+      <city>Springfield</city>
+    </address>
+  </patient>
+</patients>
+
+billing node is completely absent from output.
+Structurally valid XML/JSON/YAML guaranteed.`},
+
+/* 12 */
+{cat:'gray',sh:'Audit Log',sub:'immutable trail',isNew:false,isUpd:true,
+ title:'Audit Log — Enriched with Scope & Profile Events',tech:'Python · file-locked append · JSON-lines format',mut:false,
+ enters:['conflict_log from Phase 2','coverage_log from Phase 3','prune_log / synthetic_log from Subtree Ops','k-anon report','context dict (role, request id)'],
+ exits:['Appended JSON-line to audit log file','Audit record available for operator / compliance review'],
+ before:`v1 audit log contained:
+  - conflict entries
+  - coverage entries
+  - k-anon result
+
+v2 adds:
+  - scope_events: which scopes were evaluated
+  - strategy_used: masked | drop_subtree | synthesize
+  - profile_applied: which profile name was expanded
+  - role: which role triggered the strategy`,
+ after:`audit log entry (JSON-line):
+{
+  "request_id": "4f2a9c81",
+  "role": "analyst",
+  "policy_version": "2.0",
+  "scope_events": [
+    {
+      "path": "$.billing",
+      "profile": "financial_card",
+      "strategy": "drop_subtree",
+      "role": "analyst"
+    },
+    {
+      "path": "$.medical_history",
+      "profile": "person_pii",
+      "strategy": "masked",
+      "role": "analyst"
+    }
+  ],
+  "conflicts": 1,
+  "uncovered_nodes": 0,
+  "k_anonymity_achieved": false,
+  "timestamp": "2026-04-15T08:00:00Z"
+}`},
+
+/* 13 */
+{cat:'gray',sh:'Response',sub:'role-based output',isNew:false,isUpd:true,
+ title:'Response — Role-Tailored HTTP Output (v2.0)',tech:'FastAPI · Response · Content-Type per format · enriched headers',mut:false,
+ enters:['Output bytes','Role string + all logs from pipeline','scope_plan summary'],
+ exits:['HTTP response body appropriate to role','Response headers now include scope strategy summary'],
+ before:`Four role outputs in v2.0:
+
+  ANALYST  → scoped + profile-based masked body
+             billing subtree absent (drop_subtree)
+             medical_history masked via person_pii
+             global ssn suppressed
+
+  AUDITOR  → labelled dry-run output
+             [WOULD APPLY: mask_pattern (financial_card)]
+             [SCOPE STRATEGY: drop_subtree for role=analyst]
+             [UNMASKED — NO RULE] for uncovered nodes
+
+  OPERATOR → raw bytes passthrough
+             audit log entry appended first
+
+  DEFAULT  → strictest fallback — entire document
+             passed through deep_redact if configured`,
+ after:`HTTP/1.1 200 OK
+Content-Type: application/xml
+x-request-id:              4f2a9c81...
+x-policy-version:          2.0
+x-role:                    analyst
+x-scopes-evaluated:        2
+x-scopes-dropped:          1
+x-profiles-applied:        financial_card,person_pii
+x-conflict-count:          1
+x-uncovered-count:         0
+x-k-anonymity-achieved:    false
+
+<?xml ...>
+<patients>
+  <patient id="P001">
+    <name>ANON_ff8d9819</name>
+    <dob>1980s</dob>
+    ...`},
+];
+
+let cur=0;
+function e(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+
+function buildStrip(){
+  const el=document.getElementById('strip');
+  el.innerHTML='';
+  S.forEach((s,i)=>{
+    const c=C[s.cat];
+    const act=i===cur;
+    const activeBg=act?c.bd:c.bg;
+    const activeTx=act?(dk?c.bg:'#fff'):c.tx;
+    const box=document.createElement('div');
+    box.className='sbox';
+    box.onclick=()=>go(i);
+    box.setAttribute('role','button');
+    box.setAttribute('aria-label',`Stage ${i}: ${s.sh}`);
+    let badge='';
+    if(s.isNew) badge=`<div style="font-size:8px;font-weight:700;color:${C.amber.bd};margin-top:1px">★ NEW</div>`;
+    else if(s.isUpd) badge=`<div style="font-size:8px;font-weight:600;color:${C.teal.bd};margin-top:1px">↑ UPD</div>`;
+    box.innerHTML=`<div class="snum" style="background:${activeBg};border-color:${c.bd};color:${activeTx}">${i}</div><div class="slbl" style="color:${act?c.bd:'var(--color-text-tertiary)'}">${e(s.sh)}</div>${badge}`;
+    el.appendChild(box);
+    if(i<S.length-1){
+      const arr=document.createElement('div');
+      arr.className='sarr';
+      arr.innerHTML='›';
+      el.appendChild(arr);
+    }
+  });
+}
+
+function buildDetail(){
+  const s=S[cur];
+  const c=C[s.cat];
+  const coral=C.coral;
+  const gray=C.gray;
+  const ambr=C.amber;
+  const tel=C.teal;
+  const mutHtml=s.mut
+    ? `<span class="mbadge" style="background:${coral.bg};color:${coral.tx};border:1px solid ${coral.bd}">★ data mutated at this stage</span>`
+    : `<span class="mbadge" style="background:${gray.bg};color:${gray.tx};border:1px solid ${gray.bd}">data unchanged at this stage</span>`;
+  const newHtml=s.isNew
+    ? `<span class="dpnew" style="background:${ambr.bd};color:${dk?ambr.bg:'#fff'}">NEW IN v2.0</span>`
+    : s.isUpd
+      ? `<span class="dpnew" style="background:${tel.bd};color:${dk?tel.bg:'#fff'}">UPDATED IN v2.0</span>`
+      : '';
+
+  const ent=s.enters.map(x=>`<li class="dli"><div class="ddot" style="background:${c.bd}"></div><span>${e(x)}</span></li>`).join('');
+  const ext=s.exits.map(x=>`<li class="dli"><div class="ddot" style="background:${c.bd}"></div><span>${e(x)}</span></li>`).join('');
+  const pre1=s.before?`<p class="ch" style="margin-top:10px">data entering this stage</p><pre class="pre">${e(s.before)}</pre>`:'';
+  const pre2=s.after?`<p class="ch" style="margin-top:10px">data leaving this stage</p><pre class="pre">${e(s.after)}</pre>`:'';
+
+  document.getElementById('dp').innerHTML=`
+    <div class="dph">
+      <div class="dpbadge" style="background:${c.bg};color:${c.tx};border:1px solid ${c.bd}">${e(s.cat)}</div>
+      <div style="min-width:0">
+        <p class="dptitle">${e(s.title)} ${newHtml}</p>
+        <p class="dptech">${e(s.tech)}</p>
+      </div>
+    </div>
+    <div class="dpbody">
+      <div class="dpcol">
+        ${mutHtml}
+        <p class="ch">what arrives</p>
+        <ul class="dlist">${ent}</ul>
+        <p class="ch" style="margin-top:12px">what leaves</p>
+        <ul class="dlist">${ext}</ul>
+      </div>
+      <div class="dpcol" style="min-width:0">
+        ${pre1}${pre2}
+      </div>
+    </div>`;
+}
+
+function buildDots(){
+  document.getElementById('dots').innerHTML=S.map((_,i)=>`<div class="d2${i===cur?' a':''}"></div>`).join('');
+}
+
+function render(){
+  buildStrip();buildDetail();buildDots();
+  document.getElementById('bp').disabled=cur===0;
+  document.getElementById('bn').disabled=cur===S.length-1;
+}
+
+function go(i){cur=i;render();}
+function mv(d){cur=Math.max(0,Math.min(S.length-1,cur+d));render();}
+
+render();
+</script>

@@ -1,6 +1,13 @@
-"""POST /mask endpoint.
+"""POST /mask endpoint — v2.0.
 
-Routes requests to the appropriate pipeline path based on the caller's role.
+Changes from v1
+---------------
+* ``require_role()`` replaced by ``resolve_role()`` — supports both
+  ``X-Masking-Role`` (simple header) and ``X-API-Token`` (token store).
+* Three new response headers added from ``PipelineResult``:
+    ``X-Scopes-Evaluated``  number of scopes matched in the document
+    ``X-Scopes-Dropped``    number of scopes with ``drop_subtree`` strategy
+    ``X-Profiles-Applied``  comma-separated list of profile names applied
 """
 
 from __future__ import annotations
@@ -11,7 +18,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import Response
 
-from app.auth import require_role
+from app.auth import resolve_role
 from app.config import get_settings
 from app.exceptions import AuditLogWriteError
 from app.file_reader import read_file
@@ -22,7 +29,7 @@ from app.policy.loader import get_policy
 router = APIRouter()
 
 _CONTENT_TYPES = {
-    "xml": "application/xml",
+    "xml":  "application/xml",
     "json": "application/json",
     "yaml": "application/yaml",
 }
@@ -44,7 +51,7 @@ class MaskBody(BaseModel):
 async def mask(
     body: MaskBody,
     request: Request,
-    role: Annotated[str, Depends(require_role())],
+    role: Annotated[str, Depends(resolve_role())],
 ) -> Response:
     settings = get_settings()
     policy = get_policy()
@@ -84,7 +91,7 @@ async def mask(
             media_type=content_type,
             headers={
                 "X-Request-ID": rid,
-                "X-Unmasked": "true",
+                "X-Unmasked":   "true",
             },
         )
 
@@ -98,11 +105,16 @@ async def mask(
 
     content_type = _CONTENT_TYPES.get(fmt, "application/octet-stream")
     headers = {
-        "X-Request-ID": rid,
-        "X-Policy-Version": policy.version,
-        "X-Conflict-Count": str(result.conflict_count),
-        "X-Uncovered-Count": str(result.uncovered_count),
+        "X-Request-ID":          rid,
+        "X-Policy-Version":      policy.version,
+        "X-Role":                role,
+        "X-Conflict-Count":      str(result.conflict_count),
+        "X-Uncovered-Count":     str(result.uncovered_count),
         "X-K-Anonymity-Achieved": str(result.k_achieved).lower(),
+        # v2.0 scope headers
+        "X-Scopes-Evaluated":    str(result.scopes_evaluated),
+        "X-Scopes-Dropped":      str(result.scopes_dropped),
+        "X-Profiles-Applied":    ",".join(result.profiles_applied),
     }
 
     # Store conflict log for later retrieval by auditors.
@@ -110,8 +122,12 @@ async def mask(
     store_conflict_log(rid, result.conflict_log)
 
     logger.info(
-        "Masked %s as %s | conflicts=%d uncovered=%d k_achieved=%s",
-        body.filename, role, result.conflict_count, result.uncovered_count, result.k_achieved,
+        "Masked %s as %s | conflicts=%d uncovered=%d k_achieved=%s "
+        "scopes=%d dropped=%d profiles=%s",
+        body.filename, role,
+        result.conflict_count, result.uncovered_count, result.k_achieved,
+        result.scopes_evaluated, result.scopes_dropped,
+        ",".join(result.profiles_applied) or "none",
     )
 
     return Response(

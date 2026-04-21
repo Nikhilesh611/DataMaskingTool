@@ -1,24 +1,42 @@
-"""Phase 3 — The Masking Loop.
+"""Phase 3 — The Masking Loop (v2.0).
 
 Iterates every node in the document exactly once, checks its role in the
 decision index, and applies the appropriate transformation (or label).
+
+v2.0 additions
+--------------
+Pre-loop subtree operations
+    Before the per-node loop, the phase processes every subtree root in
+    ``scope_plan.subtree_roots`` whose strategy is not ``"masked"`` or
+    ``"default_allow"``:
+
+    * ``drop_subtree``  — ``adapter.remove_node(root)``
+    * ``deep_redact``   — walk all leaves → set to ``[REDACTED]``
+    * ``synthesize``    — walk all leaves → set to synthetic value
+
+    After bulk ops, any remaining node whose scope strategy is one of the
+    above (or ``"default_allow"``) is skipped in the regular loop, avoiding
+    double-processing and suppressing spurious coverage_log entries.
+
+mask_pattern technique
+    The new element-level ``mask_pattern`` technique is handled in
+    ``_apply_technique`` via ``techniques.mask_pattern``.
 
 Roles
 -----
 analyst   Apply the actual masking technique.
 auditor   Replace every covered node with a descriptive label; replace
           every uncovered node with ``[UNMASKED — NO RULE DEFINED]``.
-operator  Phase 3 does not run — the raw bytes are returned directly by
-          the runner.
-
-No new index building or conflict resolution happens here.
+          Scope labels are added for scoped nodes in bulk strategies.
+operator  Phase 3 does not run — the raw bytes are returned by the runner.
 """
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from app.adapters.base import FormatAdapter
+from app.pipeline.phase0 import ScopePlan
 from app.pipeline.phase1 import CoverageIndex
 from app.pipeline.phase2 import DecisionIndex
 from app.policy.models import MaskingRule
@@ -27,13 +45,15 @@ from app import techniques
 
 CoverageLog = List[Dict[str, str]]   # list of {path, reason}
 
+# Strategies handled as bulk subtree operations before the main loop
+_BULK_STRATEGIES = frozenset({"drop_subtree", "deep_redact", "synthesize"})
+
+# Strategies completely excluded from the per-node coverage/masking loop
+_SKIP_STRATEGIES = frozenset({"drop_subtree", "deep_redact", "synthesize", "default_allow"})
+
 
 def _is_leaf(adapter: FormatAdapter, node: Any) -> bool:
-    """Return True if *node* holds a scalar value (not a container).
-
-    Setting a label on a dict/list node would corrupt the serialised output.
-    We only label leaf (scalar) nodes.  Container nodes are structural.
-    """
+    """Return True if *node* holds a scalar value (not a container)."""
     val = adapter.get_value(node)
     return not isinstance(val, (dict, list))
 
@@ -70,6 +90,8 @@ def _apply_technique(
         techniques.format_preserve(adapter, node)
     elif t == "noise":
         techniques.noise(adapter, node, coverage_log=coverage_log, node_path=node_path)
+    elif t == "mask_pattern":
+        techniques.mask_pattern(adapter, node, pattern=rule.pattern or "")
     else:
         # Should never reach here — Pydantic validates technique names.
         techniques.redact(adapter, node)
@@ -85,7 +107,21 @@ def _auditor_label(rule: MaskingRule) -> str:
         return f"[WOULD APPLY: pseudonymize | consistent={cons}]"
     if t == "noise":
         return "[WOULD APPLY: noise | ±10%]"
+    if t == "mask_pattern":
+        return f"[WOULD APPLY: mask_pattern | pattern={rule.pattern}]"
     return f"[WOULD APPLY: {t}]"
+
+
+# ── Subtree bulk operation helpers ────────────────────────────────────────────
+
+def _deep_redact_node(adapter: FormatAdapter, root: Any) -> None:
+    """Walk all leaves in *root*'s subtree and set each to ``[REDACTED]``."""
+    techniques.deep_redact_subtree(adapter, root)
+
+
+def _synthesize_node(adapter: FormatAdapter, root: Any) -> None:
+    """Walk all leaves in *root*'s subtree and replace with synthetic data."""
+    techniques.synthesize_subtree(adapter, root)
 
 
 # ── Main phase-3 entry point ──────────────────────────────────────────────────
@@ -96,6 +132,7 @@ def apply_masking(
     decision_index: DecisionIndex,
     coverage_index: CoverageIndex,
     role: str,
+    scope_plan: Optional[ScopePlan] = None,
 ) -> Tuple[bytes, CoverageLog]:
     """Apply masking to the tree according to *role* and return serialised bytes.
 
@@ -111,6 +148,8 @@ def apply_masking(
         Maps node identity → path for unmatched nodes (Phase 1 output).
     role:
         ``"analyst"`` or ``"auditor"``.
+    scope_plan:
+        Phase 0 output.  ``None`` is equivalent to an empty plan (v1 mode).
 
     Returns
     -------
@@ -118,27 +157,85 @@ def apply_masking(
         The serialised, masked document.
     coverage_log:
         Records nodes skipped (ancestor suppressed) and generalise / noise
-        fallbacks.
+        fallbacks, plus subtree bulk operation records.
     """
     if role == "operator":
         raise ValueError("Phase 3 must not run for the operator role.")
 
+    _plan = scope_plan or ScopePlan()
+    members = _plan.members
     coverage_log: CoverageLog = []
 
-    # Snapshot all nodes before mutating anything.
-    # Suppressing a node modifies the underlying dict/list during iteration,
-    # which raises RuntimeError in Python.  A pre-built list avoids this.
+    # ── Phase 3.0: Bulk subtree operations (pre-loop) ─────────────────────────
+    # Process each unique subtree root exactly once.
+    processed_root_ids: Set[int] = set()
+
+    for root_node, decision in _plan.subtree_roots:
+        root_id = adapter.get_identity(root_node)
+        if root_id in processed_root_ids:
+            continue
+        processed_root_ids.add(root_id)
+
+        if not adapter.is_attached(root_node):
+            continue  # Already detached by an outer scope's drop_subtree
+
+        strategy = decision.strategy
+
+        if strategy == "drop_subtree":
+            try:
+                scope_path = adapter.get_path(root_node)
+            except Exception:
+                scope_path = decision.scope_path
+            if role == "auditor":
+                # Auditor sees the label instead of a drop
+                adapter.set_value(
+                    root_node,
+                    f"[SCOPE STRATEGY: drop_subtree | profile={decision.profile_name or 'none'}]",
+                ) if adapter.is_leaf_node(root_node) else None
+            else:
+                adapter.remove_node(root_node)
+            coverage_log.append({"path": scope_path, "reason": "scope:drop_subtree"})
+
+        elif strategy == "deep_redact":
+            try:
+                scope_path = adapter.get_path(root_node)
+            except Exception:
+                scope_path = decision.scope_path
+            _deep_redact_node(adapter, root_node)
+            coverage_log.append({"path": scope_path, "reason": "scope:deep_redact"})
+            if role == "auditor":
+                # Additional label on the root element if it's a leaf
+                pass  # leaf values already set to [REDACTED] by deep_redact
+
+        elif strategy == "synthesize":
+            try:
+                scope_path = adapter.get_path(root_node)
+            except Exception:
+                scope_path = decision.scope_path
+            _synthesize_node(adapter, root_node)
+            coverage_log.append({"path": scope_path, "reason": "scope:synthesize"})
+
+        # "masked" and "default_allow" are handled in the per-node loop below.
+
+    # ── Phase 3.1: Per-node masking loop ──────────────────────────────────────
+    # Snapshot all nodes before mutating anything (suppress mutates parent
+    # containers which would raise RuntimeError during iteration).
     all_nodes = list(adapter.iter_nodes(tree))
 
     for node in all_nodes:
         node_id = adapter.get_identity(node)
 
+        # Skip nodes that belong to bulk-processed or default_allow scopes.
+        scope_decision = members.get(node_id)
+        if scope_decision is not None and scope_decision.strategy in _SKIP_STRATEGIES:
+            continue
+
         if node_id not in decision_index:
-            # Uncovered node.
+            # Uncovered node (not matched by any rule).
             if role == "auditor":
                 if adapter.is_attached(node) and _is_leaf(adapter, node):
                     adapter.set_value(node, "[UNMASKED — NO RULE DEFINED]")
-            # analyst and operator: leave unchanged
+            # analyst and operator: leave unchanged.
             continue
 
         # Check whether a previous suppress already removed an ancestor.

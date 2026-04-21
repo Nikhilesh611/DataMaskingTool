@@ -72,6 +72,14 @@ class YAMLAdapter(FormatAdapter):
     def iter_nodes(self, tree: NodeWrapper) -> Iterable[NodeWrapper]:
         yield from iter_wrapped(tree)
 
+    def iter_subtree(self, subtree_root: NodeWrapper) -> Iterable[NodeWrapper]:
+        """Yield *subtree_root* and every wrapped descendant in depth-first order."""
+        yield from iter_wrapped(subtree_root)
+
+    def is_leaf_node(self, node: NodeWrapper) -> bool:
+        """Return True if *node* holds a scalar value (not a dict or list)."""
+        return self._json_adapter.is_leaf_node(node)
+
     def get_identity(self, node: NodeWrapper) -> int:
         return id(node)
 

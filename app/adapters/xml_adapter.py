@@ -74,6 +74,27 @@ class XMLAdapter(FormatAdapter):
             for attr_name in elem.attrib:
                 yield XMLAttributeNode(elem, attr_name)
 
+    def iter_subtree(self, subtree_root: Any) -> Iterable[Any]:
+        """Yield *subtree_root* and every descendant in depth-first order.
+
+        *subtree_root* must be a raw lxml ``_Element`` (as returned by
+        ``select``), not an ``XMLTreeWrapper``.
+        """
+        if isinstance(subtree_root, XMLAttributeNode):
+            yield subtree_root
+            return
+        for elem in subtree_root.iter():
+            yield elem
+            for attr_name in elem.attrib:
+                yield XMLAttributeNode(elem, attr_name)
+
+    def is_leaf_node(self, node: Any) -> bool:
+        """Return True if *node* is a scalar leaf (no child elements)."""
+        if isinstance(node, XMLAttributeNode):
+            return True
+        # An element is a leaf when it has no child element nodes.
+        return len(list(node)) == 0
+
     # ── Node identity & value ─────────────────────────────────────────────────
 
     def get_identity(self, node: Any) -> int:

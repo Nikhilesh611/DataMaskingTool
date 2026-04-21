@@ -8,13 +8,20 @@ Consumes the rule index from Phase 1 and produces:
 ``conflict_log``
     A list of ConflictRecord dicts describing every multi-rule contest.
 
+v2.0 change
+-----------
+Rules that originated from scope profile/inline expansion receive a
+``+5`` specificity bonus on top of the selector score.  This ensures that
+a deliberately scoped rule beats an accidental global wildcard that happens
+to match the same node.
+
 No tree mutations happen here.
 """
 
 from __future__ import annotations
 
 import re
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from app.pipeline.phase1 import RuleIndex
 from app.policy.models import MaskingRule
@@ -24,6 +31,9 @@ DecisionIndex = Dict[int, MaskingRule]           # node_id → winning rule
 
 ConflictRecord = Dict[str, Any]                   # structured conflict info
 ConflictLog = List[ConflictRecord]
+
+# Specificity bonus awarded to scope-expanded rules (profile + inline)
+_SCOPE_BONUS = 5
 
 
 # ── Specificity scoring ───────────────────────────────────────────────────────
@@ -73,6 +83,7 @@ def resolve_conflicts(
     rule_index: RuleIndex,
     rules: List[MaskingRule],
     node_paths: Optional[Dict[int, str]] = None,
+    expansion_rule_ids: Optional[Set[int]] = None,
 ) -> Tuple[DecisionIndex, ConflictLog]:
     """Resolve every multi-rule conflict and produce a decision index.
 
@@ -87,6 +98,9 @@ def resolve_conflicts(
     node_paths:
         Optional mapping from node identity to path string, used to
         populate the conflict log.  May be omitted.
+    expansion_rule_ids:
+        Set of ``id(rule)`` values for rules that originated from scope
+        profile / inline expansion.  These rules receive a +5 bonus.
 
     Returns
     -------
@@ -95,6 +109,7 @@ def resolve_conflicts(
     conflict_log:
         Records every multi-rule contest with scores and winner.
     """
+    _expansion_ids: Set[int] = expansion_rule_ids or set()
     decision_index: DecisionIndex = {}
     conflict_log: ConflictLog = []
 
@@ -106,9 +121,10 @@ def resolve_conflicts(
             decision_index[node_id] = competing_rules[0]
             continue
 
-        # Score each competing rule.
+        # Score each competing rule; apply scope bonus where applicable.
+        scope_bonus = lambda r: _SCOPE_BONUS if id(r) in _expansion_ids else 0
         scored = [
-            (score_selector(r.selector), rule_order.get(id(r), 9999), r)
+            (score_selector(r.selector) + scope_bonus(r), rule_order.get(id(r), 9999), r)
             for r in competing_rules
         ]
         # Higher specificity wins; lower document-order index breaks ties.
@@ -122,14 +138,14 @@ def resolve_conflicts(
             {
                 "node_path": path,
                 "winner": {
-                    "selector": winner.selector,
-                    "technique": winner.technique,
+                    "selector":    winner.selector,
+                    "technique":   winner.technique,
                     "specificity": scored[0][0],
                 },
                 "losers": [
                     {
-                        "selector": r.selector,
-                        "technique": r.technique,
+                        "selector":    r.selector,
+                        "technique":   r.technique,
                         "specificity": sc,
                     }
                     for sc, _, r in scored[1:]

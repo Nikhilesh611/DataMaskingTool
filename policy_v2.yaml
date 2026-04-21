@@ -1,0 +1,271 @@
+version: "2.0"
+
+record_root:
+  - "$.patients[*]"
+  - "//patient"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PROFILES — reusable mini-policies (defined once, applied inside any scope)
+# ─────────────────────────────────────────────────────────────────────────────
+
+profiles:
+
+  # Standard PII masking: name, dob, ssn, email, phone
+  personal_pii:
+    rules:
+      - selector: "$..name"
+        technique: redact
+      - selector: "//name"
+        technique: redact
+      - selector: "$..dob"
+        technique: generalize
+        hierarchy: date
+        level: 2
+      - selector: "//dob"
+        technique: generalize
+        hierarchy: date
+        level: 2
+      - selector: "$..ssn"
+        technique: suppress
+      - selector: "//ssn"
+        technique: suppress
+      - selector: "$..email"
+        technique: pseudonymize
+        consistent: true
+      - selector: "//email"
+        technique: pseudonymize
+        consistent: true
+      - selector: "$..phone"
+        technique: redact
+      - selector: "//phone"
+        technique: redact
+
+  # Address fields: partial masking (street redacted, city redacted, zip generalised)
+  address_mask:
+    rules:
+      - selector: "$..street"
+        technique: mask_pattern
+        pattern: "[STREET REDACTED]"
+      - selector: "//street"
+        technique: mask_pattern
+        pattern: "[STREET REDACTED]"
+      - selector: "$..city"
+        technique: redact
+      - selector: "//city"
+        technique: redact
+      - selector: "$..zip"
+        technique: generalize
+        hierarchy: zipcode
+        level: 2
+      - selector: "//zip"
+        technique: generalize
+        hierarchy: zipcode
+        level: 2
+
+  # Payment card data: mask card number (last-4 visible), suppress CVV, noise on amount
+  card_data:
+    rules:
+      - selector: "$..card_number"
+        technique: mask_pattern
+        pattern: "****-****-****-{last4}"
+      - selector: "//card_number"
+        technique: mask_pattern
+        pattern: "****-****-****-{last4}"
+      - selector: "$..cvv"
+        technique: suppress
+      - selector: "//cvv"
+        technique: suppress
+      - selector: "$..amount"
+        technique: noise
+      - selector: "//amount"
+        technique: noise
+
+  # Medical record fields: generalise diagnosis, add noise to blood pressure
+  medical_mask:
+    rules:
+      - selector: "$..diagnosis"
+        technique: generalize
+        hierarchy: icd10
+        level: 1
+      - selector: "//diagnosis"
+        technique: generalize
+        hierarchy: icd10
+        level: 1
+      - selector: "$..bloodpressure"
+        technique: noise
+      - selector: "//bloodpressure"
+        technique: noise
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SCOPES — path-bounded masking zones with per-role strategies
+# ─────────────────────────────────────────────────────────────────────────────
+# Order matters: list outer scopes before inner scopes.  Inner scopes are
+# processed last and their decisions override outer-scope decisions for nodes
+# they share (last-writer-wins).
+# ─────────────────────────────────────────────────────────────────────────────
+
+scopes:
+
+  # ── PERSONAL INFO ──────────────────────────────────────────────────────────
+  # Apply PII profile.  Analyst and auditor get masked output.
+  # Operator gets the raw subtree (default_allow = pass through unchanged).
+  - path: "$.patients[*].personal_info"
+    apply_profile: personal_pii
+    roles:
+      analyst:
+        strategy: masked
+      auditor:
+        strategy: masked
+      operator:
+        strategy: default_allow
+      default:
+        strategy: masked
+
+  - path: "//personal_info"
+    apply_profile: personal_pii
+    roles:
+      analyst:
+        strategy: masked
+      auditor:
+        strategy: masked
+      operator:
+        strategy: default_allow
+      default:
+        strategy: masked
+
+  # ── ADDRESS (inner scope — overrides personal_info for address nodes) ──────
+  # Analyst: synthesize the whole address subtree (realistic fake addresses).
+  # Auditor: apply address_mask profile rules (partial masking + label view).
+  # Default: drop the address entirely.
+  - path: "$.patients[*].personal_info.contact.address"
+    apply_profile: address_mask
+    roles:
+      analyst:
+        strategy: synthesize
+      auditor:
+        strategy: masked
+      default:
+        strategy: drop_subtree
+
+  - path: "//address"
+    apply_profile: address_mask
+    roles:
+      analyst:
+        strategy: synthesize
+      auditor:
+        strategy: masked
+      default:
+        strategy: drop_subtree
+
+  # ── MEDICAL HISTORY ────────────────────────────────────────────────────────
+  # Analyst: masked (applies medical_mask profile to structured fields).
+  # Auditor: masked (labelled dry-run view).
+  # Default: drop the entire subtree — no medical data escapes.
+  - path: "$.patients[*].medical_history"
+    apply_profile: medical_mask
+    roles:
+      analyst:
+        strategy: masked
+      auditor:
+        strategy: masked
+      default:
+        strategy: drop_subtree
+
+  - path: "//medical_history"
+    apply_profile: medical_mask
+    roles:
+      analyst:
+        strategy: masked
+      auditor:
+        strategy: masked
+      default:
+        strategy: drop_subtree
+
+  # ── CLINICAL NOTES (inner scope — deep_redact the free-text notes) ─────────
+  # Free-form clinical text is highly sensitive.  Analyst and auditor both
+  # get deep_redact: every leaf value is replaced with [REDACTED].
+  # Default: drop entirely.
+  - path: "$.patients[*].medical_history.clinical_notes"
+    roles:
+      analyst:
+        strategy: deep_redact
+      auditor:
+        strategy: deep_redact
+      default:
+        strategy: drop_subtree
+
+  - path: "//clinical_notes"
+    roles:
+      analyst:
+        strategy: deep_redact
+      auditor:
+        strategy: deep_redact
+      default:
+        strategy: drop_subtree
+
+  # ── BILLING ────────────────────────────────────────────────────────────────
+  # Analyst: drop the billing subtree entirely — no financial data visible.
+  # Auditor: masked via card_data profile (card_number last-4 visible, CVV
+  #          suppressed, amount noised) so the auditor can verify technique coverage.
+  # Default: drop.
+  - path: "$.patients[*].billing"
+    apply_profile: card_data
+    roles:
+      analyst:
+        strategy: drop_subtree
+      auditor:
+        strategy: masked
+      default:
+        strategy: drop_subtree
+
+  - path: "//billing"
+    apply_profile: card_data
+    roles:
+      analyst:
+        strategy: drop_subtree
+      auditor:
+        strategy: masked
+      default:
+        strategy: drop_subtree
+
+  # ── ASSIGNED DOCTOR ────────────────────────────────────────────────────────
+  # Doctor data is not patient PII — it's institutional information.
+  # All roles see it unmasked (default_allow).
+  - path: "$.patients[*].assigned_doctor"
+    roles:
+      default:
+        strategy: default_allow
+
+  - path: "//assigned_doctor"
+    roles:
+      default:
+        strategy: default_allow
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# GLOBAL RULES — element-level rules applied to any node NOT inside a scope
+# ─────────────────────────────────────────────────────────────────────────────
+
+rules:
+  # Pseudonymise the top-level patient ID (outside all scopes above)
+  - selector: "$..patient_id"
+    technique: pseudonymize
+    consistent: true
+
+  # Pseudonymise the XML id attribute on <patient> elements
+  - selector: "//@id"
+    technique: pseudonymize
+    consistent: true
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# K-ANONYMITY
+# ─────────────────────────────────────────────────────────────────────────────
+
+k_anonymity:
+  enabled: true
+  k: 2
+  quasi_identifiers:
+    - "$..dob"
+    - ".//dob"

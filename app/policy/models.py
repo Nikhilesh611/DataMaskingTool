@@ -1,7 +1,18 @@
-"""Policy Pydantic v2 models.
+"""Policy Pydantic v2 models — v2.0.
 
 Validated once at startup; after that the policy is an immutable object
 passed through the call stack by reference.
+
+v2.0 additions
+--------------
+* ``TechniqueName`` gains ``"mask_pattern"`` (element-level partial reveal).
+* ``MaskingRule`` gains optional ``pattern`` field (mask_pattern only).
+* ``ProfileRule``   — a rule inside a named profile (selector is absolute).
+* ``MaskingProfile`` — named, reusable collection of ProfileRules.
+* ``RoleStrategy``  — per-role strategy for a scope.
+* ``ScopeRule``     — path-bounded subtree with profile + role strategies.
+* ``MaskingPolicy`` gains optional ``profiles`` and ``scopes`` dicts
+  (fully backward-compatible with v1.0 policies that omit them).
 """
 
 from __future__ import annotations
@@ -14,6 +25,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 # ── Valid technique names ─────────────────────────────────────────────────────
 
 TechniqueName = Literal[
+    # v1.0 techniques
     "suppress",
     "nullify",
     "redact",
@@ -21,6 +33,8 @@ TechniqueName = Literal[
     "generalize",
     "format_preserve",
     "noise",
+    # v2.0 techniques (element-level)
+    "mask_pattern",   # partial reveal via a pattern string e.g. "****-{last4}"
 ]
 
 
@@ -34,7 +48,8 @@ class MaskingRule(BaseModel):
     # Technique-specific optional fields
     hierarchy: Optional[str] = None
     level: Optional[int] = None
-    consistent: Optional[bool] = True  # pseudonymize only
+    consistent: Optional[bool] = True   # pseudonymize only
+    pattern: Optional[str] = None       # mask_pattern only (e.g. "****-****-****-{last4}")
 
     @model_validator(mode="after")
     def _validate_technique_params(self) -> "MaskingRule":
@@ -51,7 +66,107 @@ class MaskingRule(BaseModel):
                 raise ValueError(
                     f"'level' must be a non-negative integer, got {self.level}."
                 )
+        if self.technique == "mask_pattern" and self.pattern is None:
+            raise ValueError(
+                "Rules using 'mask_pattern' must specify 'pattern'."
+            )
         return self
+
+
+# ── v2.0: Profile rule (selector is absolute, validated same as MaskingRule) ──
+
+class ProfileRule(BaseModel):
+    """A rule inside a MaskingProfile.
+
+    Selectors are the same absolute XPath / JSONPath strings as global rules.
+    Phase 1 evaluates them against the whole tree, then filters results to
+    nodes that fall within the scope boundary.
+    """
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    selector: str
+    technique: TechniqueName
+    hierarchy: Optional[str] = None
+    level: Optional[int] = None
+    consistent: Optional[bool] = True
+    pattern: Optional[str] = None
+
+    @model_validator(mode="after")
+    def _validate(self) -> "ProfileRule":
+        if self.technique == "generalize":
+            if self.hierarchy is None:
+                raise ValueError("ProfileRule using 'generalize' must specify 'hierarchy'.")
+            if self.level is None:
+                raise ValueError("ProfileRule using 'generalize' must specify 'level'.")
+        if self.technique == "mask_pattern" and self.pattern is None:
+            raise ValueError("ProfileRule using 'mask_pattern' must specify 'pattern'.")
+        return self
+
+    def to_masking_rule(self) -> "MaskingRule":
+        """Convert to a full MaskingRule for use inside the pipeline."""
+        return MaskingRule(
+            selector=self.selector,
+            technique=self.technique,
+            hierarchy=self.hierarchy,
+            level=self.level,
+            consistent=self.consistent,
+            pattern=self.pattern,
+        )
+
+
+# ── v2.0: Masking Profile ─────────────────────────────────────────────────────
+
+class MaskingProfile(BaseModel):
+    """Named, reusable collection of rules.  Applied inside scope boundaries."""
+    model_config = ConfigDict(frozen=True)
+
+    rules: List[ProfileRule] = Field(default_factory=list)
+
+
+# ── v2.0: Role strategy within a scope ───────────────────────────────────────
+
+class RoleStrategy(BaseModel):
+    """Defines how a specific role is handled inside a scope.
+
+    Strategies
+    ----------
+    masked        Apply profile + inline rules to nodes within this scope as
+                  normal element-level masking.
+    drop_subtree  Remove the entire subtree from the document.
+    default_allow Leave all nodes within the subtree entirely unchanged (no
+                  masking, no auditor labelling).
+    deep_redact   Keep the subtree structure but replace every leaf value with
+                  ``[REDACTED]``.
+    synthesize    Keep the subtree structure but replace every leaf value with
+                  plausible synthetic data using field-name heuristics.
+    """
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    strategy: Literal[
+        "masked",
+        "drop_subtree",
+        "default_allow",
+        "deep_redact",
+        "synthesize",
+    ] = "masked"
+
+
+# ── v2.0: Scope rule ─────────────────────────────────────────────────────────
+
+class ScopeRule(BaseModel):
+    """A path-bounded masking zone with its own profile and role strategies.
+
+    ``path``          XPath or JSONPath selector identifying the subtree root(s).
+    ``apply_profile`` Name of a profile from ``MaskingPolicy.profiles``.
+    ``roles``         Maps role name (or ``"default"``) to ``RoleStrategy``.
+    ``rules``         Inline rules merged with the profile's rules.
+    """
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    path: str = Field(..., description="Selector identifying the subtree root(s).")
+    apply_profile: Optional[str] = None
+    roles: Dict[str, RoleStrategy] = Field(default_factory=dict)
+    rules: List[ProfileRule] = Field(default_factory=list)
 
 
 # ── k-Anonymity configuration ─────────────────────────────────────────────────
@@ -75,10 +190,16 @@ class MaskingPolicy(BaseModel):
     rules: List[MaskingRule] = Field(default_factory=list)
     k_anonymity: Optional[KAnonConfig] = None
 
+    # v2.0 additions — fully backward compatible; both default to empty
+    profiles: Dict[str, MaskingProfile] = Field(default_factory=dict)
+    scopes: List[ScopeRule] = Field(default_factory=list)
+
     @model_validator(mode="after")
-    def _validate_hierarchy_names(self) -> "MaskingPolicy":
-        """Verify that every generalise rule names a registered hierarchy."""
+    def _validate_all(self) -> "MaskingPolicy":
+        """Combined validator: checks hierarchy names and profile references."""
         from app.hierarchies.base import HIERARCHY_REGISTRY  # late import avoids circular
+
+        # Validate hierarchy names in global rules
         for i, rule in enumerate(self.rules):
             if rule.technique == "generalize" and rule.hierarchy is not None:
                 if rule.hierarchy not in HIERARCHY_REGISTRY:
@@ -87,4 +208,27 @@ class MaskingPolicy(BaseModel):
                         f"Rule {i}: hierarchy '{rule.hierarchy}' is not registered. "
                         f"Registered hierarchies: {registered}."
                     )
+
+        # Validate hierarchy names in profile rules
+        for prof_name, profile in self.profiles.items():
+            for j, prule in enumerate(profile.rules):
+                if prule.technique == "generalize" and prule.hierarchy is not None:
+                    if prule.hierarchy not in HIERARCHY_REGISTRY:
+                        registered = sorted(HIERARCHY_REGISTRY.keys())
+                        raise ValueError(
+                            f"Profile '{prof_name}' rule {j}: hierarchy "
+                            f"'{prule.hierarchy}' is not registered. "
+                            f"Registered: {registered}."
+                        )
+
+        # Validate profile references in scopes
+        for i, scope in enumerate(self.scopes):
+            if scope.apply_profile and scope.apply_profile not in self.profiles:
+                registered = sorted(self.profiles.keys())
+                raise ValueError(
+                    f"Scope {i} (path='{scope.path}'): apply_profile "
+                    f"'{scope.apply_profile}' is not defined in profiles. "
+                    f"Defined profiles: {registered}."
+                )
+
         return self

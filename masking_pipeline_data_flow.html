@@ -118,7 +118,7 @@ const S=[
  title:'Format adapter — serialise back to original format',tech:'json.dumps() · etree.tostring() · yaml.dump() — same adapter instance, reverse direction',mut:false,
  enters:['Fully mutated node tree','Original format string (same adapter used in reverse)'],
  exits:['Output bytes in original file format','Ready to attach to HTTP response body'],
- before:`mutated XMLTreeWrapper state:\n  name:      "ANON_7f3a2c91"\n  dob:       "1985"\n  ssn:       (absent)        (suppressed)\n  address:   (none)          (nullify produced <address/>)`,
+ before:`mutated XMLTreeWrapper state:\n  name:      "ANON_7f3a2c91"\n  dob:       "1985"          (or "*" after k-anon)\n  ssn:       (absent)        (suppressed)\n  address:   (none)          (nullify produced <address/>)`,
  after:`etree.tostring() unwraps XMLTreeWrapper → bytes:\n\n<?xml version='1.0' encoding='UTF-8'?>\n<patients>\n  <patient id="P001">\n    <name>ANON_ff8d9819</name>\n    <dob>1985</dob>\n  ...\n\noutput: beautifully masked generic format.`},
 
 {cat:'gray',sh:'Response',sub:'role-based output',
@@ -167,7 +167,7 @@ function buildDetail(){
 
   const ent=s.enters.map(x=>`<li class="dli"><div class="ddot" style="background:${c.bd}"></div><span>${e(x)}</span></li>`).join('');
   const ext=s.exits.map(x=>`<li class="dli"><div class="ddot" style="background:${c.bd}"></div><span>${e(x)}</span></li>`).join('');
-  const pre1=s.before?`<p class="ch" style="margin-top:10px">data entering this stage</p><pre class="pre">${e(s.before)}</pre>`:'' ;
+  const pre1=s.before?`<p class="ch" style="margin-top:10px">data entering this stage</p><pre class="pre">${e(s.before)}</pre>`:'';
   const pre2=s.after?`<p class="ch" style="margin-top:10px">data leaving this stage</p><pre class="pre">${e(s.after)}</pre>`:'';
 
   document.getElementById('dp').innerHTML=`

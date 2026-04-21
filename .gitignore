@@ -69,6 +69,3 @@ ehthumbs.db
 # Keep sample data files, exclude any generated/processed output
 output/
 masked_output/
-pipeline.txt
-python_files_explanation.txt
-masking_rules_explanation.txt

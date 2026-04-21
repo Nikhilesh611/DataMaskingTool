@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<patients>
+  <patient id="P001">
+    <personal_info>
+      <name>Alice Johnson</name>
+      <dob>1985-07-23</dob>
+      <ssn>123-45-6789</ssn>
+      <contact>
+        <email>alice@example.com</email>
+        <phone>555-100-2001</phone>
+        <address>
+          <street>123 Main St</street>
+          <city>New York</city>
+          <zip>10001</zip>
+        </address>
+      </contact>
+    </personal_info>
+    <medical_history>
+      <diagnosis>J18.9</diagnosis>
+      <bloodpressure>120.5</bloodpressure>
+      <clinical_notes>
+        <admission_note>Patient presented with severe chest pain and shortness of breath.</admission_note>
+        <progress_note>Day 2: Patient stable, responding well to medication and rest.</progress_note>
+        <discharge_summary>Discharged after 3 days. Follow-up appointment in 2 weeks.</discharge_summary>
+      </clinical_notes>
+    </medical_history>
+    <billing>
+      <card_number>4111-1111-1111-1234</card_number>
+      <cvv>123</cvv>
+      <amount>450.00</amount>
+      <plan>Gold</plan>
+    </billing>
+    <assigned_doctor>
+      <doctor_id>DOC-104</doctor_id>
+      <name>Dr. John Smith</name>
+      <department>Cardiology</department>
+    </assigned_doctor>
+  </patient>
+  <patient id="P002">
+    <personal_info>
+      <name>Bob Williams</name>
+      <dob>1972-03-14</dob>
+      <ssn>987-65-4321</ssn>
+      <contact>
+        <email>bob@example.com</email>
+        <phone>555-200-3002</phone>
+        <address>
+          <street>456 Oak Avenue</street>
+          <city>Chicago</city>
+          <zip>60601</zip>
+        </address>
+      </contact>
+    </personal_info>
+    <medical_history>
+      <diagnosis>E11.9</diagnosis>
+      <bloodpressure>138.0</bloodpressure>
+      <clinical_notes>
+        <admission_note>Type 2 diabetic. Presented for routine insulin adjustment.</admission_note>
+        <progress_note>Day 1: Blood glucose levels stabilised after insulin dosage change.</progress_note>
+        <discharge_summary>Discharged same day. Weight management program enrolled.</discharge_summary>
+      </clinical_notes>
+    </medical_history>
+    <billing>
+      <card_number>5500-0000-0000-0004</card_number>
+      <cvv>456</cvv>
+      <amount>1200.50</amount>
+      <plan>Platinum</plan>
+    </billing>
+    <assigned_doctor>
+      <doctor_id>DOC-205</doctor_id>
+      <name>Dr. Sarah Lee</name>
+      <department>Endocrinology</department>
+    </assigned_doctor>
+  </patient>
+  <patient id="P003">
+    <personal_info>
+      <name>Carol Davis</name>
+      <dob>1990-11-05</dob>
+      <ssn>555-12-3456</ssn>
+      <contact>
+        <email>carol@example.com</email>
+        <phone>555-300-4003</phone>
+        <address>
+          <street>789 Pine Road</street>
+          <city>Houston</city>
+          <zip>77001</zip>
+        </address>
+      </contact>
+    </personal_info>
+    <medical_history>
+      <diagnosis>I10</diagnosis>
+      <bloodpressure>145.2</bloodpressure>
+      <clinical_notes>
+        <admission_note>Primary hypertension, elevated readings for past 3 months.</admission_note>
+        <progress_note>Medication adjusted. BP reduced to 130/85 by day 2.</progress_note>
+        <discharge_summary>Stable. Continue daily medication. Review in 1 month.</discharge_summary>
+      </clinical_notes>
+    </medical_history>
+    <billing>
+      <card_number>3714-496353-98431</card_number>
+      <cvv>789</cvv>
+      <amount>300.00</amount>
+      <plan>Silver</plan>
+    </billing>
+    <assigned_doctor>
+      <doctor_id>DOC-304</doctor_id>
+      <name>Dr. James Park</name>
+      <department>General Medicine</department>
+    </assigned_doctor>
+  </patient>
+</patients>
