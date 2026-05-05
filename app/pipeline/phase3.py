@@ -52,10 +52,7 @@ _BULK_STRATEGIES = frozenset({"drop_subtree", "deep_redact", "synthesize"})
 _SKIP_STRATEGIES = frozenset({"drop_subtree", "deep_redact", "synthesize", "default_allow"})
 
 
-def _is_leaf(adapter: FormatAdapter, node: Any) -> bool:
-    """Return True if *node* holds a scalar value (not a container)."""
-    val = adapter.get_value(node)
-    return not isinstance(val, (dict, list))
+
 
 
 # ── Role-specific technique dispatch ─────────────────────────────────────────
@@ -230,7 +227,7 @@ def apply_masking(
         if node_id not in decision_index:
             # Uncovered node (not matched by any rule).
             if role == "auditor":
-                if adapter.is_attached(node) and _is_leaf(adapter, node):
+                if adapter.is_attached(node) and adapter.is_leaf_node(node):
                     adapter.set_value(node, "[UNMASKED — NO RULE DEFINED]")
             # analyst and operator: leave unchanged.
             continue
@@ -248,7 +245,7 @@ def apply_masking(
         node_path = adapter.get_path(node)
 
         if role == "auditor":
-            if _is_leaf(adapter, node):
+            if adapter.is_leaf_node(node):
                 label = _auditor_label(rule)
                 adapter.set_value(node, label)
         else:
