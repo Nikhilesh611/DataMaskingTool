@@ -141,9 +141,14 @@ def enforce_k_anonymity(
     qi_hierarchies: Dict[int, str] = {}  # qi_index → hierarchy_name
     qi_levels: Dict[int, int] = {}       # qi_index → current level
 
+    # Collect all generalize rules from global rules and profiles
+    all_rules = list(policy.rules)
+    for profile in policy.profiles.values():
+        all_rules.extend(profile.rules)
+
     for i, sel in enumerate(qi_selectors):
         # Find a matching rule in the policy for this selector.
-        for rule in policy.rules:
+        for rule in all_rules:
             if rule.technique == "generalize" and rule.selector == sel and rule.hierarchy:
                 qi_hierarchies[i] = rule.hierarchy
                 qi_levels[i] = rule.level or 0
