@@ -1,0 +1,17 @@
+[
+  {
+    "group": "admin-users",
+    "internal_role": "operator",
+    "priority": 1
+  },
+  {
+    "group": "finance-team",
+    "internal_role": "auditor",
+    "priority": 10
+  },
+  {
+    "group": "data-analysts",
+    "internal_role": "analyst",
+    "priority": 20
+  }
+]

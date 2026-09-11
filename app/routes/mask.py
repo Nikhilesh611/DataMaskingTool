@@ -1,10 +1,12 @@
-"""POST /mask endpoint — v2.0.
+"""POST /mask endpoint — v3.0.
 
-Changes from v1
+Changes from v2
 ---------------
-* ``require_role()`` replaced by ``resolve_role()`` — supports both
-  ``X-Masking-Role`` (simple header) and ``X-API-Token`` (token store).
-* Three new response headers added from ``PipelineResult``:
+* ``resolve_role()`` replaced by ``get_mask_auth_dependency()`` — a startup-time
+  dispatcher that returns either the local token-store dependency (AUTH_MODE=local)
+  or the enterprise JWT dependency (AUTH_MODE=enterprise_jwt).  The masking pipeline
+  itself is completely unchanged: both paths produce the same ``role: str``.
+* Three v2 response headers retained:
     ``X-Scopes-Evaluated``  number of scopes matched in the document
     ``X-Scopes-Dropped``    number of scopes with ``drop_subtree`` strategy
     ``X-Profiles-Applied``  comma-separated list of profile names applied
@@ -18,7 +20,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import Response
 
-from app.auth import resolve_role
+from app.auth import get_mask_auth_dependency
 from app.config import get_settings
 from app.exceptions import AuditLogWriteError
 from app.file_reader import read_file
@@ -51,7 +53,7 @@ class MaskBody(BaseModel):
 async def mask(
     body: MaskBody,
     request: Request,
-    role: Annotated[str, Depends(resolve_role())],
+    role: Annotated[str, Depends(get_mask_auth_dependency)],
 ) -> Response:
     settings = get_settings()
     policy = get_policy()
@@ -92,6 +94,7 @@ async def mask(
             headers={
                 "X-Request-ID": rid,
                 "X-Unmasked":   "true",
+                "X-Role":       role,
             },
         )
 

@@ -92,7 +92,8 @@ def run_pipeline(
     if request_id is None:
         request_id = str(uuid.uuid4())
 
-    if role not in policy.roles:
+    valid_roles = set(policy.roles.keys()) if policy.roles else {"analyst", "auditor", "operator"}
+    if role not in valid_roles:
         raise UnknownRoleError(role)
 
     # Operator bypasses the entire pipeline.

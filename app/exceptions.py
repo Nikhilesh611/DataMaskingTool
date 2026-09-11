@@ -109,3 +109,32 @@ class AuthorizationError(MaskingAPIError):
             f"Role '{role}' is not authorised to access {endpoint}.",
             detail={"role": role, "endpoint": endpoint},
         )
+
+
+class JWKSFetchError(MaskingAPIError):
+    """JWKS endpoint is unreachable or returned an error. → HTTP 503
+
+    This is a service-level failure (the IdP is down), not a caller error.
+    The service must not fall back to returning unmasked data.
+    """
+
+    def __init__(self, jwks_uri: str, reason: str) -> None:
+        super().__init__(
+            f"Failed to fetch JWKS from '{jwks_uri}': {reason}. "
+            "The IdP may be temporarily unreachable.",
+            detail={"jwks_uri": jwks_uri, "reason": reason},
+        )
+
+
+class JWKSKeyNotFoundError(MaskingAPIError):
+    """JWT's kid does not match any key in the JWKS after a refresh. → HTTP 401
+
+    This indicates the token was signed with an unknown or revoked key.
+    """
+
+    def __init__(self, kid: str, jwks_uri: str) -> None:
+        super().__init__(
+            f"No key with kid='{kid}' found in JWKS at '{jwks_uri}'. "
+            "The token may have been issued with a revoked or unknown key.",
+            detail={"kid": kid, "jwks_uri": jwks_uri},
+        )

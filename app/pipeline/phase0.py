@@ -122,16 +122,16 @@ def evaluate_scopes(
         role_strat = scope_rule.roles.get(role)
         if role_strat:
             strategy = role_strat.strategy
-            apply_profile = role_strat.profile
+            apply_profile = role_strat.profile or scope_rule.apply_profile
         else:
             default_strat = scope_rule.roles.get("default")
             if default_strat:
                 strategy = default_strat.strategy
-                apply_profile = default_strat.profile
+                apply_profile = default_strat.profile or scope_rule.apply_profile
             else:
                 role_def = policy.roles.get(role)
                 strategy = role_def.default_fallback if role_def else "default_allow"
-                apply_profile = None
+                apply_profile = scope_rule.apply_profile
 
         # ── 3. Expand profile rules into full MaskingRule objects ───────────
         expanded_rules: List[MaskingRule] = []
@@ -145,6 +145,12 @@ def evaluate_scopes(
                     mr = prof_rule.to_masking_rule()
                     expanded_rules.append(mr)
                     plan.expansion_rule_ids.add(id(mr))
+
+        if scope_rule.rules:
+            for srule in scope_rule.rules:
+                mr = srule.to_masking_rule()
+                expanded_rules.append(mr)
+                plan.expansion_rule_ids.add(id(mr))
 
         # ── 4. Build the ScopeDecision ──────────────────────────────────────
         decision = ScopeDecision(

@@ -23,6 +23,8 @@ from app.exceptions import (
     AuthenticationError,
     AuthorizationError,
     FileNotFoundError,
+    JWKSFetchError,
+    JWKSKeyNotFoundError,
     MaskingAPIError,
     ParseError,
     PathTraversalError,
@@ -30,6 +32,7 @@ from app.exceptions import (
     UnknownRoleError,
     UnsupportedFormatError,
 )
+from app.idp.oidc_discovery import OIDCDiscoveryError
 from app.middleware import RequestIDMiddleware
 
 
@@ -59,7 +62,33 @@ async def lifespan(app: FastAPI):
     )
 
     from app.logging_config import get_app_logger
-    get_app_logger().info("Server started. Policy loaded. Data dir: %s", settings.data_dir)
+    logger = get_app_logger()
+
+    # 5 — Enterprise JWT setup (only when AUTH_MODE=enterprise_jwt)
+    if settings.auth_mode == "enterprise_jwt":
+        from app.idp.group_mapper import GroupMappingStore, set_group_mapping_store
+        from app.idp.jwks_client import JWKSCache, set_jwks_cache
+
+        # Load group mappings from file — fail fast on missing/invalid file.
+        store = GroupMappingStore()
+        try:
+            store.load(settings.idp_mappings_path)
+        except (FileNotFoundError, ValueError) as exc:
+            print(f"[FATAL] {exc}", file=sys.stderr)
+            sys.exit(1)
+        set_group_mapping_store(store)
+
+        # Initialise JWKS cache with configured TTL (preserve pre-seeded cache in tests).
+        from app.idp.jwks_client import get_jwks_cache
+        if not get_jwks_cache()._store:
+            set_jwks_cache(JWKSCache(ttl_seconds=settings.idp_jwks_cache_ttl_seconds))
+
+        logger.info(
+            "Enterprise JWT auth enabled. Issuer=%s Audience=%s Mappings=%s",
+            settings.idp_issuer, settings.idp_audience, settings.idp_mappings_path,
+        )
+    else:
+        logger.info("Local auth mode. Policy loaded. Data dir: %s", settings.data_dir)
 
     yield
     # Shutdown — nothing to clean up for now.
@@ -135,6 +164,21 @@ async def handle_unknown_role(req: Request, exc: UnknownRoleError) -> JSONRespon
 @app.exception_handler(MaskingAPIError)
 async def handle_generic(req: Request, exc: MaskingAPIError) -> JSONResponse:
     return _error_response(500, exc.message, exc.detail)
+
+
+@app.exception_handler(JWKSFetchError)
+async def handle_jwks_fetch(req: Request, exc: JWKSFetchError) -> JSONResponse:
+    return _error_response(503, exc.message, exc.detail)
+
+
+@app.exception_handler(OIDCDiscoveryError)
+async def handle_oidc_discovery(req: Request, exc: OIDCDiscoveryError) -> JSONResponse:
+    return _error_response(503, exc.message, exc.detail)
+
+
+@app.exception_handler(JWKSKeyNotFoundError)
+async def handle_jwks_key_not_found(req: Request, exc: JWKSKeyNotFoundError) -> JSONResponse:
+    return _error_response(401, exc.message, exc.detail)
 
 
 # ── Routers ───────────────────────────────────────────────────────────────────

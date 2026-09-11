@@ -156,6 +156,12 @@ def apply_masking(
         Records nodes skipped (ancestor suppressed) and generalise / noise
         fallbacks, plus subtree bulk operation records.
     """
+    if role not in ("analyst", "auditor"):
+        raise ValueError(
+            f"apply_masking does not handle role '{role}'. "
+            "The operator role bypasses the masking pipeline."
+        )
+
     _plan = scope_plan or ScopePlan()
     members = _plan.members
     coverage_log: CoverageLog = []

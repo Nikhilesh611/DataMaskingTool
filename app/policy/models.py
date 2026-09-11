@@ -179,6 +179,7 @@ class ScopeRule(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     path: str = Field(..., description="Selector identifying the subtree root(s).")
+    apply_profile: Optional[str] = None
     roles: Dict[str, RoleStrategy] = Field(default_factory=dict)
     rules: List[ProfileRule] = Field(default_factory=list)
 
@@ -238,9 +239,17 @@ class MaskingPolicy(BaseModel):
 
         # Validate profile references in scope role strategies and role existence
         for i, scope in enumerate(self.scopes):
+            known_roles = set(self.roles.keys()) if self.roles else {"analyst", "auditor", "operator"}
+            if scope.apply_profile and scope.apply_profile not in self.profiles:
+                registered = sorted(self.profiles.keys())
+                raise ValueError(
+                    f"Scope {i} (path='{scope.path}'): apply_profile "
+                    f"'{scope.apply_profile}' is not defined in profiles. "
+                    f"Defined profiles: {registered}."
+                )
             for role_name, role_strat in scope.roles.items():
-                if role_name != "default" and role_name not in self.roles:
-                    registered_roles = sorted(self.roles.keys())
+                if role_name != "default" and role_name not in known_roles:
+                    registered_roles = sorted(known_roles)
                     raise ValueError(
                         f"Scope {i} (path='{scope.path}'): role '{role_name}' "
                         f"is not defined in the top-level 'roles' registry. "
