@@ -246,8 +246,15 @@ def resolve_role_enterprise():
     return dependency
 
 
+from fastapi import Depends, Header, Request
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+
+_http_bearer = HTTPBearer(auto_error=False)
+
+
 async def get_mask_auth_dependency(
     request: Request,
+    credentials: HTTPAuthorizationCredentials | None = Depends(_http_bearer),
 ) -> str:
     """FastAPI dependency for the ``/mask`` endpoint.
 

@@ -16,7 +16,7 @@ from dotenv import load_dotenv
 
 # Load .env file (if present) before reading any environment variables.
 # Variables already set in the shell environment take precedence.
-load_dotenv(override=False)
+load_dotenv(override=True)
 
 
 @dataclass(frozen=True)
