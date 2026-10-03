@@ -16,7 +16,7 @@ from dotenv import load_dotenv
 
 # Load .env file (if present) before reading any environment variables.
 # Variables already set in the shell environment take precedence.
-load_dotenv(override=True)
+load_dotenv(override=False)
 
 
 @dataclass(frozen=True)
@@ -42,8 +42,10 @@ class Settings:
     idp_groups_claim: str = "groups"  # JWT claim key for the groups list
     idp_jwks_cache_ttl_seconds: int = 300  # JWKS cache TTL
 
-    # ── Admin API (Phase 2) ───────────────────────────────────────────────────
-    admin_token: str = ""         # Separate token for /admin/* endpoints
+    # ── Admin API & UI ────────────────────────────────────────────────────────
+    admin_token: str = ""         # Separate API key for /admin/* endpoints
+    admin_username: str = "admin" # Admin UI username
+    admin_password: str = "admin123" # Admin UI password
 
 
 def _require(name: str) -> str:
@@ -138,6 +140,8 @@ def load_settings() -> Settings:
             sys.exit(1)
 
     admin_token = os.environ.get("ADMIN_TOKEN", "").strip()
+    admin_username = os.environ.get("ADMIN_USERNAME", "admin").strip()
+    admin_password = os.environ.get("ADMIN_PASSWORD", "admin123").strip()
 
     return Settings(
         data_dir=data_dir,
@@ -153,6 +157,8 @@ def load_settings() -> Settings:
         idp_groups_claim=idp_groups_claim,
         idp_jwks_cache_ttl_seconds=idp_jwks_cache_ttl,
         admin_token=admin_token,
+        admin_username=admin_username,
+        admin_password=admin_password,
     )
 
 

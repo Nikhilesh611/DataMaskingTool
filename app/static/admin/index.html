@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Data Masking Engine — Admin Control Plane</title>
+  <link rel="stylesheet" href="/static/admin/style.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+</head>
+<body>
+
+  <!-- ==================== LOGIN VIEW ==================== -->
+  <div id="login-view" class="view-container">
+    <div class="login-card">
+      <div class="login-header">
+        <div class="logo-badge">🛡️</div>
+        <h2>Enterprise Data Masking</h2>
+        <p class="subtitle">Control Plane & Governance Admin</p>
+      </div>
+      <form id="login-form">
+        <div class="form-group">
+          <label for="login-username">Admin Username</label>
+          <input type="text" id="login-username" placeholder="admin" required autocomplete="username" />
+        </div>
+        <div class="form-group">
+          <label for="login-password">Admin Password</label>
+          <input type="password" id="login-password" placeholder="••••••••" required autocomplete="current-password" />
+        </div>
+        <div id="login-error" class="alert alert-error hidden"></div>
+        <button type="submit" class="btn btn-primary btn-block">Log In to Control Plane</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ==================== DASHBOARD VIEW ==================== -->
+  <div id="dashboard-view" class="view-container hidden">
+
+    <!-- Top Navigation Bar -->
+    <header class="navbar">
+      <div class="navbar-brand">
+        <span class="logo">🛡️</span>
+        <span class="brand-title">Data Masking Engine</span>
+        <span class="badge badge-admin">ADMIN CONTROL PLANE</span>
+      </div>
+      <div class="navbar-user">
+        <span class="user-greeting">Logged in as <strong id="admin-user-display">Admin</strong></span>
+        <button id="logout-btn" class="btn btn-outline btn-sm">Log Out</button>
+      </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="main-content">
+      
+      <!-- Tab Controls -->
+      <nav class="tabs-nav">
+        <button class="tab-btn active" data-tab="tab-mappings">
+          <span class="icon">👥</span> Group Mappings
+        </button>
+        <button class="tab-btn" data-tab="tab-policy">
+          <span class="icon">📜</span> Policy & Rules
+        </button>
+        <button class="tab-btn" data-tab="tab-sandbox">
+          <span class="icon">🧪</span> Masking Sandbox
+        </button>
+      </nav>
+
+      <!-- TAB 1: GROUP MAPPINGS -->
+      <section id="tab-mappings" class="tab-content active">
+        <div class="section-header">
+          <div>
+            <h3>IdP Group to Role Mappings</h3>
+            <p class="section-desc">Map enterprise Identity Provider groups (Keycloak, Azure AD, Okta) directly to internal masking profiles.</p>
+          </div>
+          <button id="add-mapping-btn" class="btn btn-primary">+ Add New Mapping</button>
+        </div>
+
+        <!-- Mappings Table -->
+        <div class="card">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>IdP Group Name</th>
+                <th>Mapped Role / Profile</th>
+                <th>Priority (Lower = Higher)</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="mappings-table-body">
+              <tr><td colspan="4" class="text-muted">Loading mappings...</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Group Simulator Card -->
+        <div class="card mt-6">
+          <h4>🔍 Group Resolution Simulator</h4>
+          <p class="section-desc">Enter a list of JWT group claims to test priority resolution in real time.</p>
+          <div class="simulator-layout">
+            <div class="form-group">
+              <label for="sim-groups-input">JWT Group Claims (comma separated)</label>
+              <input type="text" id="sim-groups-input" placeholder="e.g. finance-team, data-analysts" value="finance-team, data-analysts" />
+              <button id="run-sim-btn" class="btn btn-secondary mt-3">Run Resolution Test</button>
+            </div>
+            <div class="simulator-results">
+              <label>Resolution Result</label>
+              <div id="sim-result-box" class="result-box">Click run to test resolution...</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 2: POLICY & RULES -->
+      <section id="tab-policy" class="tab-content">
+        <div class="section-header">
+          <div>
+            <h3>Masking Policy Management</h3>
+            <p class="section-desc">Edit, validate, and hot-reload active masking rules (`policy.yaml`) instantly without restarting servers.</p>
+          </div>
+          <button id="save-policy-btn" class="btn btn-primary">⚡ Validate & Hot-Reload Policy</button>
+        </div>
+
+        <div id="policy-alert" class="alert hidden mt-3"></div>
+
+        <div class="policy-layout mt-4">
+          <div class="card code-editor-card">
+            <div class="card-header-bar">
+              <span class="file-name">📄 policy.yaml</span>
+              <span id="policy-status-badge" class="badge badge-success">Valid</span>
+            </div>
+            <textarea id="policy-yaml-editor" spellcheck="false" placeholder="Loading policy YAML..."></textarea>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 3: MASKING SANDBOX -->
+      <section id="tab-sandbox" class="tab-content">
+        <div class="section-header">
+          <div>
+            <h3>Payload Masking Sandbox</h3>
+            <p class="section-desc">Dry-run sample JSON/XML payloads against a selected role or profile to preview output side-by-side.</p>
+          </div>
+          <button id="run-sandbox-btn" class="btn btn-primary">▶ Run Test Mask</button>
+        </div>
+
+        <div class="sandbox-controls card mt-3">
+          <div class="form-row">
+            <div class="form-group">
+              <label for="sandbox-role-select">Target Role / Profile</label>
+              <select id="sandbox-role-select">
+                <option value="analyst">analyst (PII Masked)</option>
+                <option value="auditor">auditor (Financial Masked)</option>
+                <option value="operator">operator (Raw / Unmasked)</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="sandbox-format-select">Data Format</label>
+              <select id="sandbox-format-select">
+                <option value="json">JSON</option>
+                <option value="xml">XML</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div class="sandbox-editor-grid mt-4">
+          <div class="card editor-pane">
+            <div class="pane-header">Input Sample Payload</div>
+            <textarea id="sandbox-input" spellcheck="false">{
+  "patient_id": "P-10029",
+  "name": "Sarah Connor",
+  "email": "sarah.connor@cyberdyne.com",
+  "ssn": "987-65-4321",
+  "billing": {
+    "card_number": "4532-8921-9900-1122",
+    "amount": 1250.00
+  }
+}</textarea>
+          </div>
+
+          <div class="card editor-pane">
+            <div class="pane-header">
+              <span>Masked Output</span>
+              <span id="sandbox-metrics-badge" class="metrics-badge hidden">Scopes Dropped: 0</span>
+            </div>
+            <pre id="sandbox-output" class="output-box">Click "Run Test Mask" to see output...</pre>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- MODAL: ADD / EDIT MAPPING -->
+  <div id="mapping-modal" class="modal-backdrop hidden">
+    <div class="modal-card">
+      <h3 id="modal-title">Add Group Mapping</h3>
+      <form id="mapping-form" class="mt-4">
+        <div class="form-group">
+          <label for="map-group-name">IdP Group Name</label>
+          <input type="text" id="map-group-name" placeholder="e.g. data-analysts" required />
+        </div>
+        <div class="form-group">
+          <label for="map-role-name">Internal Role / Masking Profile</label>
+          <input type="text" id="map-role-name" placeholder="e.g. analyst" required />
+        </div>
+        <div class="form-group">
+          <label for="map-priority">Priority (Lower = Higher Priority)</label>
+          <input type="number" id="map-priority" min="0" value="10" required />
+        </div>
+        <div class="modal-actions mt-6">
+          <button type="button" id="close-modal-btn" class="btn btn-outline">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save Mapping</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="/static/admin/app.js"></script>
+</body>
+</html>

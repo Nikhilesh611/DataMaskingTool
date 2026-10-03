@@ -17,6 +17,13 @@ from fastapi.testclient import TestClient
 ENDPOINT_POLICY = """
 version: "1.0"
 record_root: "$.patients[*]"
+roles:
+  analyst:
+    default_fallback: drop_subtree
+  auditor:
+    default_fallback: masked
+  operator:
+    default_fallback: default_allow
 rules:
   - selector: "$..name"
     technique: redact
@@ -69,16 +76,17 @@ def client_env():
             "AUDIT_LOG_PATH": audit_log,
             "API_TOKENS": json.dumps(TOKENS),
             "APP_LOG_LEVEL": "WARNING",
+            "AUTH_MODE": "local",
         }
 
         with patch.dict(os.environ, env_vars):
             import app.config as cfg_mod
-            cfg_mod._settings = None
+            cfg_mod.init_settings()
             from app.policy import loader as pl_mod
-            pl_mod._policy = None
+            pl_mod.load_policy(policy_file_path)
             import app.auth as auth_mod
-            from app.auth import EnvTokenStore
-            auth_mod._store = EnvTokenStore()
+            from app.auth import EnvTokenStore, set_token_store
+            set_token_store(EnvTokenStore())
 
             from app.main import app as fastapi_app
             with TestClient(fastapi_app) as c:
@@ -380,6 +388,14 @@ V2_ENDPOINT_POLICY = """
 version: "2.0"
 record_root: "$.patients[*]"
 
+roles:
+  analyst:
+    default_fallback: drop_subtree
+  auditor:
+    default_fallback: masked
+  operator:
+    default_fallback: default_allow
+
 profiles:
   mini_pii:
     rules:
@@ -464,16 +480,17 @@ def v2_client_env():
             "AUDIT_LOG_PATH":  audit_log,
             "API_TOKENS":      json_mod.dumps({"tok-analyst": "analyst", "tok-auditor": "auditor"}),
             "APP_LOG_LEVEL":   "WARNING",
+            "AUTH_MODE":       "local",
         }
 
         with patch.dict(os.environ, env_vars):
             import app.config as cfg_mod
-            cfg_mod._settings = None
+            cfg_mod.init_settings()
             from app.policy import loader as pl_mod
-            pl_mod._policy = None
+            pl_mod.load_policy(policy_path)
             import app.auth as auth_mod
-            from app.auth import EnvTokenStore
-            auth_mod._store = EnvTokenStore()
+            from app.auth import EnvTokenStore, set_token_store
+            set_token_store(EnvTokenStore())
 
             from app.main import app as fastapi_app
             with TestClient(fastapi_app) as c:

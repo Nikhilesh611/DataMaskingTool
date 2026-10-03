@@ -101,7 +101,7 @@ def main():
         "IDP_GROUPS_CLAIM": "groups",
         "IDP_MAPPINGS_PATH": "group_mappings.json",
         "IDP_JWKS_URI": jwks_uri,
-        "POLICY_PATH": "policy_v3.yaml",
+        "POLICY_PATH": "policy.yaml",
         "DATA_DIR": "./data",
         "AUDIT_LOG_PATH": "./audit.log",
         "APP_LOG_LEVEL": "WARNING",
@@ -110,7 +110,7 @@ def main():
     with patch.dict(os.environ, env_vars):
         # Reset modules to pick up env vars
         import app.config as cfg_mod
-        cfg_mod._settings = None
+        cfg_mod.init_settings()
         from app.policy import loader as pl_mod
         pl_mod._policy = None
 

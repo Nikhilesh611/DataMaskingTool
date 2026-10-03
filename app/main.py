@@ -181,8 +181,13 @@ async def handle_jwks_key_not_found(req: Request, exc: JWKSKeyNotFoundError) -> 
     return _error_response(401, exc.message, exc.detail)
 
 
-# ── Routers ───────────────────────────────────────────────────────────────────
+# ── Routers & Static Files ───────────────────────────────────────────────────
 
+import os
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import RedirectResponse
+
+from app.routes.admin import router as admin_router
 from app.routes.audit import router as audit_router
 from app.routes.health import router as health_router
 from app.routes.mask import router as mask_router
@@ -192,3 +197,14 @@ app.include_router(mask_router)
 app.include_router(audit_router)
 app.include_router(policy_router)
 app.include_router(health_router)
+app.include_router(admin_router)
+
+# Mount static files for Admin UI
+static_dir = os.path.join(os.path.dirname(__file__), "static")
+if os.path.exists(static_dir):
+    app.mount("/static", StaticFiles(directory=static_dir), name="static")
+
+
+@app.get("/admin", include_in_schema=False)
+async def admin_redirect():
+    return RedirectResponse(url="/static/admin/index.html")
