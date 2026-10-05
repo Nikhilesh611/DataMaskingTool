@@ -10,3 +10,12 @@ pytest==8.3.5
 pytest-asyncio==0.26.0
 PyJWT==2.10.1
 cryptography==50.0.1
+# ── Phase 1: Async database layer ─────────────────────────────────────────────
+sqlalchemy==2.0.36
+asyncpg==0.30.0
+# ── Phase 3: File upload support ──────────────────────────────────────────────
+python-multipart==0.0.20
+# ── Phase 4: Distributed caching & pub/sub ────────────────────────────────────
+redis==5.2.1
+# ── Phase 6: Telemetry & Prometheus metrics ───────────────────────────────────
+prometheus-client==0.21.1

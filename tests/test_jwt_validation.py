@@ -257,7 +257,7 @@ class TestMalformedToken:
         """HS256 tokens must be rejected — only asymmetric algorithms allowed."""
         token = jwt.encode(
             {"sub": "u", "iss": ISSUER, "aud": AUDIENCE, "exp": int(time.time()) + 3600},
-            "secret",
+            "a-very-secure-hmac-test-key-32bytes",
             algorithm="HS256",
         )
         with pytest.raises(AuthenticationError, match="algorithm"):

@@ -1,0 +1,43 @@
+{
+  "header": {
+    "alg": "RS256",
+    "typ": "JWT",
+    "kid": "r86N9dQ5OkPX_CiSmhyLAAgh97oluY6jSRlzLGF24kY"
+  },
+  "payload": {
+    "exp": 1787702215,
+    "iat": 1787701915,
+    "jti": "49ac0d4e-ff02-4a04-973d-fc30533766c9",
+    "iss": "http://localhost:8081/realms/lab-realm",
+    "aud": "account",
+    "sub": "4e2dae28-abd5-49e5-a890-8a54eae8bb57",
+    "typ": "Bearer",
+    "azp": "lab-client",
+    "sid": "5bc0269b-ae8d-4d0a-b3ac-f6216397187f",
+    "acr": "1",
+    "realm_access": {
+      "roles": [
+        "default-roles-lab-realm",
+        "offline_access",
+        "uma_authorization"
+      ]
+    },
+    "resource_access": {
+      "account": {
+        "roles": [
+          "manage-account",
+          "manage-account-links",
+          "view-profile"
+        ]
+      }
+    },
+    "scope": "openid profile email",
+    "email_verified": true,
+    "name": "Alice User",
+    "preferred_username": "alice",
+    "given_name": "Alice",
+    "family_name": "User",
+    "email": "alice@lab.local"
+  },
+  "signature_raw_length_bytes": 342
+}

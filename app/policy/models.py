@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 # ── Valid technique names ─────────────────────────────────────────────────────
@@ -199,9 +199,9 @@ class KAnonConfig(BaseModel):
 class MaskingPolicy(BaseModel):
     model_config = ConfigDict(frozen=True)
 
-    version: str
+    version: str = "3.0"
     format: Optional[str] = None          # overrides file extension detection
-    record_root: str | List[str]           # selector(s) that identify record boundaries
+    record_root: str | List[str] = "$"     # selector(s) that identify record boundaries (default: root)
     rules: List[MaskingRule] = Field(default_factory=list)
     k_anonymity: Optional[KAnonConfig] = None
 
@@ -209,6 +209,16 @@ class MaskingPolicy(BaseModel):
     roles: Dict[str, RoleDefinition] = Field(default_factory=dict)
     profiles: Dict[str, MaskingProfile] = Field(default_factory=dict)
     scopes: List[ScopeRule] = Field(default_factory=list)
+
+    @field_validator("version", mode="before")
+    @classmethod
+    def _coerce_version(cls, v: Any) -> str:
+        if v is None:
+            return "3.0"
+        s = str(v).strip()
+        if s in ("3", "3.0"):
+            return "3.0"
+        return s
 
     @model_validator(mode="after")
     def _validate_all(self) -> "MaskingPolicy":

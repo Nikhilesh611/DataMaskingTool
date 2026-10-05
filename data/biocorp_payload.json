@@ -1,0 +1,82 @@
+{
+  "patients": [
+    {
+      "patient_id": "BIO-90210",
+      "personal_info": {
+        "name": "Evelyn Vance",
+        "dob": "1982-11-04",
+        "ssn": "987-65-4321",
+        "contact": {
+          "email": "evelyn.vance@biomail.com",
+          "phone": "+1-555-883-9912",
+          "address": {
+            "street": "742 Evergreen Terrace",
+            "city": "Seattle",
+            "zip": "98101"
+          }
+        }
+      },
+      "medical_history": {
+        "diagnosis": "I21.9",
+        "bloodpressure": "142.5",
+        "heart_rate": "88",
+        "clinical_notes": {
+          "admission": "Acute myocardial infarction onset 2 hours prior to admission.",
+          "medications": "Administered 325mg aspirin, IV heparin protocol initiated.",
+          "prognosis": "Stable overnight in cardiac ICU. Discharge expected in 4 days."
+        }
+      },
+      "billing": {
+        "card_number": "4111-2222-3333-4444",
+        "cvv": "912",
+        "amount": "8450.00",
+        "currency": "USD",
+        "plan": "Executive-Care-Plus"
+      },
+      "assigned_doctor": {
+        "doctor_id": "DOC-771",
+        "name": "Dr. Gregory House",
+        "department": "Cardiology"
+      }
+    },
+    {
+      "patient_id": "BIO-90211",
+      "personal_info": {
+        "name": "Marcus Kane",
+        "dob": "1982-05-19",
+        "ssn": "456-78-1234",
+        "contact": {
+          "email": "marcus.kane@biomail.com",
+          "phone": "+1-555-442-7711",
+          "address": {
+            "street": "100 Innovation Way",
+            "city": "Bellevue",
+            "zip": "98004"
+          }
+        }
+      },
+      "medical_history": {
+        "diagnosis": "E11.65",
+        "bloodpressure": "135.0",
+        "heart_rate": "76",
+        "clinical_notes": {
+          "admission": "Type 2 diabetes with severe hyperglycemia.",
+          "medications": "Adjusted subcutaneous insulin lispro dosage.",
+          "prognosis": "Glucose levels stabilized under 140 mg/dL."
+        }
+      },
+      "billing": {
+        "card_number": "5500-0000-0000-8888",
+        "cvv": "345",
+        "amount": "2100.50",
+        "currency": "USD",
+        "plan": "Standard-Care"
+      },
+      "assigned_doctor": {
+        "doctor_id": "DOC-902",
+        "name": "Dr. Allison Cameron",
+        "department": "Endocrinology"
+      }
+    }
+  ]
+}

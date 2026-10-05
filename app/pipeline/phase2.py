@@ -154,3 +154,22 @@ def resolve_conflicts(
         )
 
     return decision_index, conflict_log
+
+
+# ── Conflict Log Store ────────────────────────────────────────────────────────
+import collections
+
+_MAX_STORED = 500
+_conflict_store: "collections.OrderedDict[str, ConflictLog]" = collections.OrderedDict()
+
+
+def store_conflict_log(request_id: str, log: ConflictLog) -> None:
+    if request_id in _conflict_store:
+        _conflict_store.move_to_end(request_id)
+    _conflict_store[request_id] = log
+    while len(_conflict_store) > _MAX_STORED:
+        _conflict_store.popitem(last=False)
+
+
+def get_conflict_log(request_id: str) -> Optional[ConflictLog]:
+    return _conflict_store.get(request_id)

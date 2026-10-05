@@ -1,0 +1,12 @@
+{
+  "sub": "4e2dae28-abd5-49e5-a890-8a54eae8bb57",
+  "email_verified": true,
+  "name": "Alice User",
+  "groups": [
+    "finance"
+  ],
+  "preferred_username": "alice",
+  "given_name": "Alice",
+  "family_name": "User",
+  "email": "alice@lab.local"
+}

@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Enterprise Integration North Star — Vault/Auth → Data Masking</title>
+<style>
+body{font-family:Arial,Helvetica,sans-serif;max-width:1050px;margin:0 auto;padding:40px 24px;color:#17202a;line-height:1.5}
+h1{font-size:32px;margin-bottom:8px} h2{margin-top:40px;border-bottom:1px solid #ddd;padding-bottom:8px}
+h3{margin-top:28px}.lead{font-size:18px;color:#444}
+.box{border:1px solid #ddd;border-radius:8px;padding:18px;margin:18px 0;background:#fafafa}
+.flow{font-family:Consolas,monospace;white-space:pre-wrap;background:#f5f5f5;padding:18px;border-radius:8px;overflow:auto}
+table{border-collapse:collapse;width:100%;margin:15px 0}th,td{border:1px solid #ddd;padding:10px;text-align:left;vertical-align:top}th{background:#f1f1f1}
+a{color:#0645ad}.small{font-size:14px;color:#555}.strong{border-left:4px solid #222}
+</style>
+</head>
+<body>
+
+<h1>Enterprise Integration North Star</h1>
+<p class="lead">
+How a separately developed service such as HashiCorp Vault is introduced into an enterprise,
+how different enterprise applications use it, and how our data-masking service can follow the same model.
+</p>
+
+<div class="box strong">
+<strong>What we need to prove to the professor:</strong><br>
+A third-party service does not need to become part of an enterprise's existing authentication system.
+The enterprise creates a trust/integration relationship between its identity system and the service.
+Applications then authenticate to that service using a supported standard mechanism.
+The service validates the caller and applies its own service-specific policies.
+This is the model we want to reuse for data masking.
+</div>
+
+<h2>1. The real enterprise problem</h2>
+
+<p>Imagine Company A already has its own identity system and many applications:</p>
+
+<div class="flow">Company A
+
+Users
+  |
+  v
+Enterprise Identity Provider
+(Entra / Okta / other)
+  |
+  +------ Application 1
+  |
+  +------ Application 2
+  |
+  +------ Application 3
+
+Now Company A installs/uses a separate product:
+  |
+  +------ HashiCorp Vault
+</div>
+
+<p>Vault does not replace the company's identity provider.
+Instead, Vault is configured with one or more authentication methods that connect it to
+identity/workload systems the company already uses.</p>
+
+<p>Vault supports multiple authentication methods because different environments need different
+ways to identify a client.</p>
+
+<p>
+<a href="https://developer.hashicorp.com/vault/docs/auth">HashiCorp Vault — Authentication methods</a>
+</p>
+
+<h2>2. What happens when Vault is introduced?</h2>
+
+<p>The important part is the <strong>initial setup</strong>. The enterprise administrator configures
+how Vault will trust/authenticate callers.</p>
+
+<div class="flow">Enterprise administrator
+        |
+        v
+Configure Vault
+        |
+        +-- choose authentication method
+        |
+        +-- connect it to existing identity/workload system
+        |
+        +-- configure identity/role mapping
+        |
+        +-- attach Vault policies
+        |
+        v
+Vault is now ready to accept authenticated clients
+</div>
+
+<p>So the enterprise is not saying "Vault, trust everyone who has a token."
+It explicitly configures the identity source and what authenticated identities are allowed to do.</p>
+
+<h2>3. Example: Vault using an existing JWT/OIDC identity system</h2>
+
+<p>For a JWT/OIDC integration, the existing identity provider remains the issuer of the token.</p>
+
+<div class="flow">Enterprise IdP
+    |
+    | issues JWT
+    v
+Application
+    |
+    | JWT
+    v
+Vault
+    |
+    | verify signature
+    | check issuer
+    | check audience
+    | check configured claims
+    v
+Authenticated identity
+    |
+    | map identity/role
+    v
+Vault policy
+    |
+    v
+Allowed secret / operation
+</div>
+
+<p>Vault's JWT/OIDC authentication method supports configuration around the trusted issuer,
+JWKS/OIDC discovery, audience and claims.</p>
+
+<p>
+<a href="https://developer.hashicorp.com/vault/docs/auth/jwt">HashiCorp Vault — JWT/OIDC Auth Method</a><br>
+<a href="https://developer.hashicorp.com/vault/api-docs/auth/jwt">HashiCorp Vault — JWT Auth API</a>
+</p>
+
+<h2>4. Why different enterprises can use the same Vault product</h2>
+
+<p>The Vault software is the same product. The identity configuration is different for each deployment.</p>
+
+<table>
+<tr><th>Enterprise</th><th>Existing identity</th><th>Vault configuration</th></tr>
+<tr><td>Company A</td><td>Microsoft Entra</td><td>Trust Company A's issuer/JWKS and map its identities to Vault policies</td></tr>
+<tr><td>Company B</td><td>Okta</td><td>Trust Company B's issuer/JWKS and map its identities to Vault policies</td></tr>
+<tr><td>Company C</td><td>Kubernetes workload identity</td><td>Use Vault's Kubernetes authentication method</td></tr>
+</table>
+
+<p>The product does not require all customers to have the same identity provider.
+The integration layer adapts the existing enterprise identity system to the service.</p>
+
+<p>
+<a href="https://developer.hashicorp.com/vault/docs/auth">Vault authentication methods</a>
+</p>
+
+<h2>5. Another clear example: a third-party API in Microsoft Entra</h2>
+
+<p>Microsoft Entra shows the same pattern for APIs.</p>
+
+<p>The API is registered as a protected resource. A client application is given permissions
+to that API. The client obtains an access token from Entra and sends it to the API.
+The API uses the token's permissions to control access.</p>
+
+<div class="flow">Third-party / enterprise API
+        ^
+        | accepts access tokens for this API
+        |
+Microsoft Entra ID
+        ^
+        | issues token with required permissions
+        |
+Client Application
+</div>
+
+<p>Microsoft's documentation explicitly describes registering the API, exposing scopes/roles,
+granting the client permissions, obtaining an access token and having the API authorize based
+on the token.</p>
+
+<p>
+<a href="https://learn.microsoft.com/en-us/entra/identity-platform/quickstart-register-app">
+Microsoft — Register an application
+</a><br>
+<a href="https://learn.microsoft.com/en-us/entra/identity-platform/quickstart-configure-app-expose-web-apis">
+Microsoft — Configure an application to expose a web API
+</a><br>
+<a href="https://learn.microsoft.com/en-us/entra/identity-platform/quickstart-configure-app-access-web-apis">
+Microsoft — Configure app permissions for a web API
+</a>
+</p>
+
+<h2>6. The standard enterprise pattern we are borrowing</h2>
+
+<div class="flow">1. Existing enterprise identity system
+              |
+              v
+2. Enterprise registers/configures the new service
+              |
+              v
+3. Enterprise identity system issues an access token
+              |
+              v
+4. Application calls the new service with the token
+              |
+              v
+5. New service validates the token
+              |
+              v
+6. New service maps identity/permissions to its own policy
+              |
+              v
+7. Service performs the requested operation
+              |
+              v
+8. Service records an audit event
+</div>
+
+<p>This is the core model. The exact authentication method can change, but the structure remains.</p>
+
+<h2>7. How our masking service uses the same model</h2>
+
+<p>Our masking service becomes another protected enterprise service.</p>
+
+<div class="flow">                 ENTERPRISE
+
+        Existing Identity Provider
+        (Entra / Okta / Keycloak)
+                    |
+                    | access token
+                    v
+             Enterprise App
+                    |
+                    | token + data
+                    v
+          +----------------------+
+          |   MASKING SERVICE    |
+          |                      |
+          | 1. Validate token    |
+          | 2. Identify caller   |
+          | 3. Map group/role     |
+          | 4. Find policy        |
+          | 5. Mask data         |
+          | 6. Audit             |
+          +----------+-----------+
+                     |
+                     v
+                Masked data
+                     |
+                     v
+                Enterprise App
+</div>
+
+<h2>8. How an enterprise would integrate our service</h2>
+
+<p>The enterprise should not have to create a new authentication system for us.</p>
+
+<h3>Step 1 — Register/configure our API</h3>
+
+<p>The enterprise identifies our service as a protected API/resource in its identity platform.</p>
+
+<p>For example, in Entra this means registering the API and defining scopes/roles that client
+applications can be granted.</p>
+
+<h3>Step 2 — Configure which identity system we trust</h3>
+
+<p>Our service is configured to trust the enterprise's issuer and to obtain the public keys
+needed to verify tokens.</p>
+
+<p>For the first implementation, we support OIDC/JWT.</p>
+
+<h3>Step 3 — Configure application access</h3>
+
+<p>The enterprise gives an application permission to call our masking API.</p>
+
+<p>There are two important cases:</p>
+
+<table>
+<tr><th>Case</th><th>Meaning</th></tr>
+<tr><td>Delegated/user access</td><td>The application calls the masking service on behalf of a signed-in user.</td></tr>
+<tr><td>Application access</td><td>A service calls the masking service as itself.</td></tr>
+</table>
+
+<p>Microsoft Entra explicitly distinguishes delegated permissions from application permissions.
+Which one we need depends on whether masking decisions are based on the human user, the
+calling application, or both.</p>
+
+<p>
+<a href="https://learn.microsoft.com/en-us/troubleshoot/entra/entra-id/app-integration/application-delegated-permission-access-tokens-identity-platform">
+Microsoft — Application vs delegated permissions
+</a>
+</p>
+
+<h3>Step 4 — Configure masking identity mapping</h3>
+
+<p>We should not assume every enterprise has roles called "analyst" or "auditor".</p>
+
+<p>Instead, our service lets the enterprise map its existing groups/roles to our masking profiles:</p>
+
+<div class="flow">Enterprise group             Our masking profile
+
+finance                      -> analyst
+security                     -> auditor
+data-admins                  -> admin
+</div>
+
+<p>This configuration belongs to our service. The enterprise's IdP remains the source of identity.</p>
+
+<h3>Step 5 — Application calls our API</h3>
+
+<div class="flow">Application
+    |
+    | Authorization: Bearer &lt;access-token&gt;
+    | + sensitive data
+    v
+Masking Service
+</div>
+
+<p>The service validates the token before touching the masking operation.</p>
+
+<h2>9. Exact runtime flow for our project</h2>
+
+<div class="flow">User
+ |
+ | already authenticated
+ v
+Enterprise Application
+ |
+ | gets/has enterprise access token
+ |
+ | POST /mask
+ | Authorization: Bearer &lt;token&gt;
+ | body: sensitive data
+ v
+Masking Service
+ |
+ +--> Validate signature
+ |
+ +--> Check trusted issuer
+ |
+ +--> Check audience
+ |
+ +--> Check expiry
+ |
+ +--> Read identity/group claims
+ |
+ +--> Map group → masking profile
+ |
+ +--> Load policy
+ |
+ +--> Mask
+ |
+ +--> Audit
+ |
+ v
+Masked response
+ |
+ v
+Application
+ |
+ v
+User
+</div>
+
+<h2>10. Why the token is trustworthy</h2>
+
+<p>We do not trust a token because it contains a field saying "role=admin".</p>
+
+<p>We trust it only after cryptographic and configuration checks:</p>
+
+<div class="flow">Token
+  |
+  +-- signature valid?
+  +-- issuer is trusted?
+  +-- audience is our service?
+  +-- token is not expired?
+  +-- required claims present?
+  |
+  +-- NO → reject
+  |
+  +-- YES → use identity/permissions
+</div>
+
+<p>The application cannot simply invent a JWT and have our service accept it.</p>
+
+<h2>11. What we actually need to build</h2>
+
+<table>
+<tr><th>Build</th><th>Do not build</th></tr>
+<tr>
+<td>
+JWT/OIDC validation<br>
+Issuer/JWKS configuration<br>
+Audience checking<br>
+Claim/group extraction<br>
+Group → masking-profile mapping<br>
+Masking policies<br>
+Masking engine<br>
+Audit log<br>
+REST API
+</td>
+<td>
+Identity Provider<br>
+SSO<br>
+User/password system<br>
+Enterprise directory<br>
+Custom JWT issuer<br>
+Custom authentication protocol<br>
+Vault replacement
+</td>
+</tr>
+</table>
+
+<h2>12. What we use for the 20-credit prototype</h2>
+
+<p>Use Keycloak as the test enterprise IdP.</p>
+
+<div class="flow">Keycloak
+  |
+  | JWT
+  v
+Demo Application
+  |
+  | JWT + test sensitive data
+  v
+Our Masking Service
+  |
+  +-- validate JWT
+  +-- read group
+  +-- group → masking profile
+  +-- apply policy
+  +-- audit
+  v
+Masked result
+</div>
+
+<p>This proves the integration model without requiring us to build an enterprise identity system.</p>
+
+<h2>13. What we can demonstrate to the professor</h2>
+
+<table>
+<tr><th>Test</th><th>Expected result</th></tr>
+<tr><td>Valid token + finance group</td><td>Finance masking policy applied</td></tr>
+<tr><td>Valid token + security group</td><td>Security masking policy applied</td></tr>
+<tr><td>Expired token</td><td>Request rejected</td></tr>
+<tr><td>Wrong audience</td><td>Request rejected</td></tr>
+<tr><td>Invalid signature</td><td>Request rejected</td></tr>
+<tr><td>Unknown group</td><td>Fail closed; no raw data returned</td></tr>
+<tr><td>Policy version changes</td><td>New masking result; audit records policy version</td></tr>
+</table>
+
+<h2>14. Why this is a credible enterprise architecture</h2>
+
+<div class="box">
+<strong>We are not claiming to build an enterprise IAM product.</strong><br><br>
+We are building a separate security service that plugs into an existing enterprise identity system,
+just as enterprise products such as Vault and protected APIs integrate with existing identity systems.
+The enterprise controls which applications can call the service; the service validates the identity
+and applies its own policies.
+</div>
+
+<p>The important design principle is:</p>
+
+<div class="flow">Enterprise owns identity
+        ↓
+Our service trusts/validates that identity
+        ↓
+Our service owns masking policy
+        ↓
+Our service returns only the permitted representation
+</div>
+
+<h2>15. Standardization</h2>
+
+<p>We should use existing standards rather than invent a token format:</p>
+
+<ul>
+<li>OAuth 2.0 access tokens for API authorization</li>
+<li>OpenID Connect/OIDC where user identity is involved</li>
+<li>JWT validation where the IdP issues JWT access tokens</li>
+<li>OIDC discovery/JWKS for discovering issuer/key information</li>
+<li>HTTPS/TLS for API communication</li>
+</ul>
+
+<p>OAuth Protected Resource Metadata (RFC 9728) is a current IETF standard for a protected resource
+to publish information that clients can use to discover authorization-server information.</p>
+
+<p>
+<a href="https://www.rfc-editor.org/rfc/rfc9728.html">IETF RFC 9728 — OAuth 2.0 Protected Resource Metadata</a>
+</p>
+
+<h2>16. Final architecture decision</h2>
+
+<div class="flow">                 EXISTING ENTERPRISE
+
+                    Identity Provider
+                           |
+                           | OAuth/OIDC token
+                           v
+                    Enterprise App
+                           |
+                           | Bearer token + data
+                           v
+                 +---------------------+
+                 |  OUR MASKING API    |
+                 +---------------------+
+                 | Token validation    |
+                 | Identity mapping    |
+                 | Policy engine       |
+                 | Masking engine      |
+                 | Audit               |
+                 +----------+----------+
+                            |
+                            v
+                      Masked response
+</div>
+
+<p><strong>Build this first.</strong></p>
+
+<p>Later, if required, the same masking engine could be placed behind a gateway or data-access
+proxy so the application never receives raw data. That is an expansion, not a requirement for
+the first 20-credit implementation.</p>
+
+<h2>17. Supporting official references</h2>
+
+<ul>
+<li><a href="https://developer.hashicorp.com/vault/docs/auth">HashiCorp Vault — Authentication Methods</a></li>
+<li><a href="https://developer.hashicorp.com/vault/docs/auth/jwt">HashiCorp Vault — JWT/OIDC Auth Method</a></li>
+<li><a href="https://developer.hashicorp.com/vault/api-docs/auth/jwt">HashiCorp Vault — JWT Auth API</a></li>
+<li><a href="https://learn.microsoft.com/en-us/entra/identity-platform/quickstart-register-app">Microsoft Entra — Register an Application</a></li>
+<li><a href="https://learn.microsoft.com/en-us/entra/identity-platform/quickstart-configure-app-expose-web-apis">Microsoft Entra — Expose a Web API</a></li>
+<li><a href="https://learn.microsoft.com/en-us/entra/identity-platform/quickstart-configure-app-access-web-apis">Microsoft Entra — Configure Client Permissions for a Web API</a></li>
+<li><a href="https://learn.microsoft.com/en-us/troubleshoot/entra/entra-id/app-integration/application-delegated-permission-access-tokens-identity-platform">Microsoft Entra — Delegated vs Application Permissions</a></li>
+<li><a href="https://www.rfc-editor.org/rfc/rfc9728.html">IETF RFC 9728 — OAuth Protected Resource Metadata</a></li>
+</ul>
+
+<p class="small">
+Note: Vault is used here as an architectural reference for enterprise integration and policy enforcement.
+Our masking service is not intended to reproduce Vault's full authentication system or feature set.
+</p>
+
+</body>
+</html>

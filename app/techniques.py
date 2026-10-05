@@ -38,8 +38,22 @@ def nullify(adapter: FormatAdapter, node: Any) -> None:
     adapter.set_value(node, None)
 
 
-def redact(adapter: FormatAdapter, node: Any) -> None:
-    """Replace the node value with the literal string ``[REDACTED]``."""
+def redact(adapter: FormatAdapter, node: Any, *, strict_types: bool = True) -> None:
+    """Replace the node value with the literal string ``[REDACTED]``.
+
+    When *strict_types* is ``True`` (default), integer and float values are
+    replaced with the type-compatible default (``0`` / ``0.0``) rather than
+    the string ``"[REDACTED]"``.  This prevents schema validation failures in
+    downstream systems that expect numeric fields.
+    """
+    if strict_types:
+        raw = adapter.get_value(node)
+        if isinstance(raw, int):
+            adapter.set_value(node, 0)
+            return
+        if isinstance(raw, float):
+            adapter.set_value(node, 0.0)
+            return
     adapter.set_value(node, "[REDACTED]")
 
 

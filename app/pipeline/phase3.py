@@ -93,7 +93,6 @@ def _apply_technique(
         # Should never reach here — Pydantic validates technique names.
         techniques.redact(adapter, node)
 
-
 def _auditor_label(rule: MaskingRule) -> str:
     """Build a descriptive label for the auditor role."""
     t = rule.technique
@@ -156,9 +155,8 @@ def apply_masking(
         Records nodes skipped (ancestor suppressed) and generalise / noise
         fallbacks, plus subtree bulk operation records.
     """
-    if role not in ("analyst", "auditor"):
+    if role == "operator":
         raise ValueError(
-            f"apply_masking does not handle role '{role}'. "
             "The operator role bypasses the masking pipeline."
         )
 
@@ -220,7 +218,13 @@ def apply_masking(
     # ── Phase 3.1: Per-node masking loop ──────────────────────────────────────
     # Snapshot all nodes before mutating anything (suppress mutates parent
     # containers which would raise RuntimeError during iteration).
+    # Suppress operations are collected and applied in REVERSE document order
+    # so that list-index deletion does not cause index-drift bugs.
     all_nodes = list(adapter.iter_nodes(tree))
+
+    # Separate suppress nodes from others so we can apply them last, reversed.
+    suppress_nodes: List[tuple] = []   # (node, rule, node_path)
+    non_suppress_ops: List[tuple] = [] # (node, rule, node_path) or None for skip
 
     for node in all_nodes:
         node_id = adapter.get_identity(node)
@@ -235,10 +239,8 @@ def apply_masking(
             if role == "auditor":
                 if adapter.is_attached(node) and adapter.is_leaf_node(node):
                     adapter.set_value(node, "[UNMASKED — NO RULE DEFINED]")
-            # analyst and operator: leave unchanged.
             continue
 
-        # Check whether a previous suppress already removed an ancestor.
         if not adapter.is_attached(node):
             try:
                 path = adapter.get_path(node)
@@ -255,7 +257,18 @@ def apply_masking(
                 label = _auditor_label(rule)
                 adapter.set_value(node, label)
         else:
+            # Collect suppress ops to apply in reverse order.
+            if rule.technique == "suppress":
+                suppress_nodes.append((node, rule, node_path))
+            else:
+                _apply_technique(adapter, node, rule, coverage_log, node_path)
+
+    # Apply suppress in reverse document order to avoid list index-drift.
+    for node, rule, node_path in reversed(suppress_nodes):
+        if adapter.is_attached(node):
             _apply_technique(adapter, node, rule, coverage_log, node_path)
+        else:
+            coverage_log.append({"path": node_path, "reason": "ancestor suppressed"})
 
     output_bytes = adapter.serialise(tree)
     return output_bytes, coverage_log

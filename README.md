@@ -2,6 +2,8 @@
 
 A privacy-preserving middleware REST API that masks sensitive data in **XML**, **JSON**, and **YAML** files using a declarative YAML policy.
 
+> 📖 **Enterprise Multi-Tenant Roadmap & Living Architecture**: See [docs/ARCHITECTURE_AND_IMPLEMENTATION_PLAN.md](docs/ARCHITECTURE_AND_IMPLEMENTATION_PLAN.md) for the active blueprint, multi-tenant IdP federation, stateless data plane, and 7-phase implementation tracking.
+
 ---
 
 ## Quick Start

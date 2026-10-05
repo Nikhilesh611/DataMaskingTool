@@ -84,6 +84,12 @@ def load_policy_from_string(yaml_text: str) -> MaskingPolicy:
         raise PolicyValidationError(errors)
 
 
+def set_policy(policy: MaskingPolicy) -> None:
+    """Set the cached policy singleton (used in testing and dynamic reloads)."""
+    global _policy
+    _policy = policy
+
+
 def get_policy() -> MaskingPolicy:
     """Return the cached policy singleton.
 

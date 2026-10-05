@@ -15,11 +15,17 @@ Claim extraction:
       layer) decides whether to treat this as a 403.
     - IdP groups and IdP roles are distinct concepts.  This module reads
       only the configured groups claim.  IdP roles are not used in Phase 1.
+
+Multi-tenant usage (Phase 2):
+    Use ``validate_jwt_for_tenant(token, tenant)`` instead of the lower-level
+    ``validate_jwt()``.  It reads all IdP config from the ``TenantContext``
+    and passes ``tenant_id`` to the JWKS cache so each tenant's keys are
+    stored in an isolated partition.
 """
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import jwt
 from jwt import PyJWK
@@ -27,6 +33,9 @@ from jwt import PyJWK
 from app.exceptions import AuthenticationError, MaskingAPIError
 from app.idp.jwks_client import JWKSFetchError, JWKSKeyNotFoundError, get_signing_key
 from app.idp.oidc_discovery import OIDCDiscoveryError, fetch_oidc_metadata
+
+if TYPE_CHECKING:
+    from app.auth.tenant_resolver import TenantContext
 
 
 # ── Public API ────────────────────────────────────────────────────────────────
@@ -37,6 +46,7 @@ async def validate_jwt(
     audience: str,
     *,
     jwks_uri_override: str | None = None,
+    tenant_id: str = "",
 ) -> dict[str, Any]:
     """Validate *token* and return its verified claims.
 
@@ -52,6 +62,10 @@ async def validate_jwt(
     jwks_uri_override:
         If set, OIDC discovery is skipped and this URI is used directly.
         Intended for air-gapped environments or development mocks.
+    tenant_id:
+        Tenant identifier forwarded to the JWKS cache so each tenant's keys
+        occupy an isolated partition.  Defaults to ``""`` for single-tenant
+        callers (backward compatible).
 
     Returns
     -------
@@ -92,9 +106,9 @@ async def validate_jwt(
             raise exc
         jwks_uri = metadata.jwks_uri
 
-    # ── Step 3: Fetch the signing key ─────────────────────────────────────────
+    # ── Step 3: Fetch the signing key (tenant-partitioned cache) ──────────────
     # JWKSFetchError (503) and JWKSKeyNotFoundError (401) propagate as-is.
-    raw_jwk = await get_signing_key(jwks_uri, kid)
+    raw_jwk = await get_signing_key(jwks_uri, kid, tenant_id=tenant_id)
 
     # ── Step 4: Build a PyJWK and verify ─────────────────────────────────────
     try:
@@ -133,6 +147,45 @@ async def validate_jwt(
         raise AuthenticationError(f"Invalid JWT: {exc}") from exc
 
     return claims
+
+
+async def validate_jwt_for_tenant(
+    token: str,
+    tenant: "TenantContext",
+) -> dict[str, Any]:
+    """Validate *token* using the IdP configuration from *tenant*.
+
+    This is the preferred entry point for multi-tenant callers.  All IdP
+    settings (issuer, audience, JWKS URI, groups claim) are read from the
+    ``TenantContext`` produced by ``resolve_tenant()``, and the tenant's
+    ``tenant_id`` is forwarded to the JWKS cache for key isolation.
+
+    Parameters
+    ----------
+    token:
+        Raw JWT string from ``Authorization: Bearer <token>``.
+    tenant:
+        Resolved tenant context from ``app.auth.tenant_resolver.resolve_tenant``.
+
+    Returns
+    -------
+    dict
+        Verified JWT claims payload.
+
+    Raises
+    ------
+    AuthenticationError (HTTP 401)
+        Any JWT validation failure (signature, expiry, issuer, audience, kid).
+    JWKSFetchError (HTTP 503)
+        JWKS endpoint unreachable.
+    """
+    return await validate_jwt(
+        token,
+        issuer=tenant.issuer_url,
+        audience=tenant.audience,
+        jwks_uri_override=tenant.jwks_uri or None,
+        tenant_id=tenant.tenant_id,
+    )
 
 
 def extract_groups(claims: dict[str, Any], groups_claim_key: str) -> list[str]:

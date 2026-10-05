@@ -1,0 +1,48 @@
+{
+  "header": {
+    "alg": "RS256",
+    "typ": "JWT",
+    "kid": "r86N9dQ5OkPX_CiSmhyLAAgh97oluY6jSRlzLGF24kY"
+  },
+  "payload": {
+    "exp": 1787702442,
+    "iat": 1787702142,
+    "jti": "74dd303f-1f3a-4e2e-8150-be2efa80c6f5",
+    "iss": "http://localhost:8081/realms/lab-realm",
+    "aud": "account",
+    "sub": "37adead6-77c6-4fbe-9fec-783500808f51",
+    "typ": "Bearer",
+    "azp": "lab-client",
+    "acr": "1",
+    "realm_access": {
+      "roles": [
+        "default-roles-lab-realm",
+        "offline_access",
+        "uma_authorization"
+      ]
+    },
+    "resource_access": {
+      "account": {
+        "roles": [
+          "manage-account",
+          "manage-account-links",
+          "view-profile"
+        ]
+      }
+    },
+    "scope": "profile email",
+    "clientHost": "172.21.0.1",
+    "email_verified": false,
+    "preferred_username": "service-account-lab-client",
+    "clientAddress": "172.21.0.1",
+    "client_id": "lab-client"
+  },
+  "raw_response_keys": [
+    "access_token",
+    "expires_in",
+    "refresh_expires_in",
+    "token_type",
+    "not-before-policy",
+    "scope"
+  ]
+}

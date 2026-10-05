@@ -13,6 +13,9 @@ from __future__ import annotations
 
 import sys
 from contextlib import asynccontextmanager
+from dotenv import load_dotenv
+
+load_dotenv()
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
@@ -46,13 +49,17 @@ async def lifespan(app: FastAPI):
     # 2 — Auto-register all hierarchies
     import app.hierarchies  # noqa: F401
 
-    # 3 — Load policy
+    # 3 — Policy loading:
+    # Multi-tenant policies are resolved dynamically from database per tenant.
+    # A local policy file is loaded as fallback only if configured and present.
+    import os
     from app.policy.loader import load_policy
-    try:
-        load_policy(settings.policy_path)
-    except PolicyValidationError as exc:
-        print(str(exc), file=sys.stderr)
-        sys.exit(1)
+    if settings.policy_path and os.path.exists(settings.policy_path):
+        try:
+            load_policy(settings.policy_path)
+        except PolicyValidationError as exc:
+            print(str(exc), file=sys.stderr)
+            sys.exit(1)
 
     # 4 — Configure logging
     from app.logging_config import configure_logging
@@ -64,42 +71,52 @@ async def lifespan(app: FastAPI):
     from app.logging_config import get_app_logger
     logger = get_app_logger()
 
-    # 5 — Enterprise JWT setup (only when AUTH_MODE=enterprise_jwt)
-    if settings.auth_mode == "enterprise_jwt":
-        from app.idp.group_mapper import GroupMappingStore, set_group_mapping_store
-        from app.idp.jwks_client import JWKSCache, set_jwks_cache
+    # 5 — Initialise async database (creates tables if they don't exist)
+    from app.db.session import init_db
+    try:
+        await init_db()
+        logger.info("Database initialised (tables created/verified).")
+    except Exception as exc:  # pragma: no cover
+        print(f"[FATAL] Database init failed: {exc}", file=sys.stderr)
+        sys.exit(1)
 
-        # Load group mappings from file — fail fast on missing/invalid file.
-        store = GroupMappingStore()
-        try:
-            store.load(settings.idp_mappings_path)
-        except (FileNotFoundError, ValueError) as exc:
-            print(f"[FATAL] {exc}", file=sys.stderr)
-            sys.exit(1)
-        set_group_mapping_store(store)
+    # 6 — Enterprise Multi-Tenant Engine initialized
+    logger.info("Multi-Tenant Dynamic Engine initialized (Federated IdP & DB-backed RLS).")
 
-        # Initialise JWKS cache with configured TTL (preserve pre-seeded cache in tests).
-        from app.idp.jwks_client import get_jwks_cache
-        if not get_jwks_cache()._store:
-            set_jwks_cache(JWKSCache(ttl_seconds=settings.idp_jwks_cache_ttl_seconds))
+    # 7 — Redis L2 Cache & Pub/Sub Invalidation Mesh
+    from app.cache import get_pubsub_mesh, get_redis_manager
+    redis_mgr = get_redis_manager()
+    await redis_mgr.connect()
+    if redis_mgr.is_connected:
+        get_pubsub_mesh().start_listener()
 
-        logger.info(
-            "Enterprise JWT auth enabled. Issuer=%s Audience=%s Mappings=%s",
-            settings.idp_issuer, settings.idp_audience, settings.idp_mappings_path,
-        )
-    else:
-        logger.info("Local auth mode. Policy loaded. Data dir: %s", settings.data_dir)
+    # 8 — Phase 6: Async Zero-PII Audit Ledger Worker
+    from app.audit import get_audit_ledger
+    get_audit_ledger().start_worker()
 
     yield
-    # Shutdown — nothing to clean up for now.
+
+    # Shutdown — stop audit ledger, listener and disconnect Redis
+    await get_audit_ledger().stop_worker()
+    await get_pubsub_mesh().stop_listener()
+    await get_redis_manager().disconnect()
+
+    # Dispose DB engine connection pool.
+    from app.db.session import dispose_engine
+    await dispose_engine()
+    logger.info("Database engine disposed.")
 
 
 # ── Application ───────────────────────────────────────────────────────────────
 
 app = FastAPI(
-    title="Multi-Format Data Masking API",
-    description="Privacy-preserving middleware for XML, JSON, and YAML data files.",
-    version="1.0.0",
+    title="Enterprise Data Masking Platform",
+    description=(
+        "Multi-tenant, enterprise-grade data masking service. "
+        "Supports JSON, XML, and YAML payloads with JWT-based IdP federation, "
+        "priority group-to-policy mapping, and a structured audit trail."
+    ),
+    version="2.0.0",
     lifespan=lifespan,
 )
 
@@ -181,14 +198,43 @@ async def handle_jwks_key_not_found(req: Request, exc: JWKSKeyNotFoundError) -> 
     return _error_response(401, exc.message, exc.detail)
 
 
+from app.cache import RateLimitExceededError
+
+
+@app.exception_handler(RateLimitExceededError)
+async def handle_rate_limit(req: Request, exc: RateLimitExceededError) -> JSONResponse:
+    resp = _error_response(429, exc.message, exc.detail)
+    resp.headers["Retry-After"] = str(exc.retry_after)
+    return resp
+
+
 # ── Routers ───────────────────────────────────────────────────────────────────
 
-from app.routes.audit import router as audit_router
 from app.routes.health import router as health_router
-from app.routes.mask import router as mask_router
-from app.routes.policy import router as policy_router
+from app.routes.v1.mask import router as v1_mask_router, unversioned_router as mask_router
 
+# Modern On-The-Fly Multi-Tenant Streaming Masking Endpoints (/v1/mask, /v1/mask/file, /mask, /mask/file)
+app.include_router(v1_mask_router)
 app.include_router(mask_router)
-app.include_router(audit_router)
-app.include_router(policy_router)
 app.include_router(health_router)
+
+# Phase 5: enterprise control plane admin dashboard & API
+from app.routes.admin import api_router as admin_api_router, ui_router as admin_ui_router
+app.include_router(admin_api_router)
+app.include_router(admin_ui_router)
+
+# Public authentication (Solo Developers and Enterprise Customers)
+from app.routes.auth import auth_router
+app.include_router(auth_router)
+
+# Phase 6: Prometheus metrics route
+from app.routes.metrics import metrics_router
+app.include_router(metrics_router)
+
+# Mount Frontend Static Assets
+import os
+from fastapi.staticfiles import StaticFiles
+_dist_assets = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "frontend", "dist", "assets"))
+if os.path.exists(_dist_assets):
+    app.mount("/assets", StaticFiles(directory=_dist_assets), name="assets")
+

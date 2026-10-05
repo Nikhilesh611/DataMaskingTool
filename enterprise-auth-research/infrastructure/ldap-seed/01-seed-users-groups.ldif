@@ -1,0 +1,45 @@
+dn: ou=People,dc=lab,dc=local
+objectClass: organizationalUnit
+ou: People
+
+dn: ou=Groups,dc=lab,dc=local
+objectClass: organizationalUnit
+ou: Groups
+
+dn: uid=alice,ou=People,dc=lab,dc=local
+objectClass: inetOrgPerson
+objectClass: posixAccount
+objectClass: shadowAccount
+cn: Alice Smith
+sn: Smith
+givenName: Alice
+uid: alice
+uidNumber: 1001
+gidNumber: 1001
+homeDirectory: /home/alice
+mail: alice@lab.local
+userPassword: alice123
+
+dn: uid=bob,ou=People,dc=lab,dc=local
+objectClass: inetOrgPerson
+objectClass: posixAccount
+objectClass: shadowAccount
+cn: Bob Jones
+sn: Jones
+givenName: Bob
+uid: bob
+uidNumber: 1002
+gidNumber: 1002
+homeDirectory: /home/bob
+mail: bob@lab.local
+userPassword: bob123
+
+dn: cn=finance,ou=Groups,dc=lab,dc=local
+objectClass: groupOfNames
+cn: finance
+member: uid=alice,ou=People,dc=lab,dc=local
+
+dn: cn=security,ou=Groups,dc=lab,dc=local
+objectClass: groupOfNames
+cn: security
+member: uid=bob,ou=People,dc=lab,dc=local

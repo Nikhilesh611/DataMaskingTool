@@ -1,0 +1,38 @@
+[
+  {
+    "test": "1. Valid JWT",
+    "expected": "PASS",
+    "observed": "PASS",
+    "detail": "Cryptographic signature and all claims valid."
+  },
+  {
+    "test": "2. Modified Payload",
+    "expected": "FAIL (InvalidSignatureError)",
+    "observed": "FAIL (InvalidSignatureError)",
+    "detail": "Signature verification failed"
+  },
+  {
+    "test": "3. Modified Signature",
+    "expected": "FAIL (InvalidSignatureError)",
+    "observed": "FAIL (InvalidSignatureError)",
+    "detail": "Signature verification failed"
+  },
+  {
+    "test": "4. Expired Token",
+    "expected": "FAIL (ExpiredSignatureError)",
+    "observed": "FAIL (ExpiredSignatureError)",
+    "detail": "Signature has expired"
+  },
+  {
+    "test": "5. Wrong Issuer",
+    "expected": "FAIL (InvalidIssuerError)",
+    "observed": "FAIL (InvalidIssuerError)",
+    "detail": "Invalid issuer"
+  },
+  {
+    "test": "6. Wrong Audience",
+    "expected": "FAIL (InvalidAudienceError)",
+    "observed": "FAIL (InvalidAudienceError)",
+    "detail": "Audience doesn't match"
+  }
+]

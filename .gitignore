@@ -8,10 +8,18 @@ __pycache__/
 # Distribution / packaging
 build/
 dist/
+!frontend/dist/
 *.egg-info/
 *.egg
 .eggs/
 wheels/
+node_modules/
+frontend/node_modules/
+
+# Databases & local stores
+*.db
+*.sqlite
+*.sqlite3
 
 # Unit test / coverage reports
 .pytest_cache/

@@ -1,0 +1,30 @@
+# OpenLDAP Authentication Tests Output
+# Status: OBSERVED (captured from live OpenLDAP container using ldapwhoami)
+
+=== Test 1: Alice Correct Password (Simple Bind) ===
+Command: ldapwhoami -x -H ldap://localhost:389 -D "uid=alice,ou=People,dc=lab,dc=local" -w [CORRECT]
+Output:
+dn:uid=alice,ou=People,dc=lab,dc=local
+Exit Code: 0 (Success)
+
+
+=== Test 2: Alice Incorrect Password ===
+Command: ldapwhoami -x -H ldap://localhost:389 -D "uid=alice,ou=People,dc=lab,dc=local" -w [WRONG]
+Output:
+ldap_bind: Invalid credentials (49)
+Exit Code: 49 (LDAP_INVALID_CREDENTIALS)
+
+
+=== Test 3: Bob Correct Password ===
+Command: ldapwhoami -x -H ldap://localhost:389 -D "uid=bob,ou=People,dc=lab,dc=local" -w [CORRECT]
+Output:
+dn:uid=bob,ou=People,dc=lab,dc=local
+Exit Code: 0 (Success)
+
+
+=== Test 4: Charlie Nonexistent User ===
+Command: ldapwhoami -x -H ldap://localhost:389 -D "uid=charlie,ou=People,dc=lab,dc=local" -w [PASSWORD]
+Output:
+ldap_bind: Invalid credentials (49)
+Exit Code: 49 (LDAP_INVALID_CREDENTIALS)
+Note: OpenLDAP returns identical error code 49 whether user does not exist or password is wrong (prevents user enumeration).

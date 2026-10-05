@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<patients>
+  <patient id="BIO-90210">
+    <personal_info>
+      <name>Evelyn Vance</name>
+      <dob>1982-11-04</dob>
+      <ssn>987-65-4321</ssn>
+      <contact>
+        <email>evelyn.vance@biomail.com</email>
+        <phone>+1-555-883-9912</phone>
+        <address>
+          <street>742 Evergreen Terrace</street>
+          <city>Seattle</city>
+          <zip>98101</zip>
+        </address>
+      </contact>
+    </personal_info>
+    <medical_history>
+      <diagnosis>I21.9</diagnosis>
+      <bloodpressure>142.5</bloodpressure>
+      <heart_rate>88</heart_rate>
+      <clinical_notes>
+        <admission>Acute myocardial infarction onset 2 hours prior to admission.</admission>
+        <medications>Administered 325mg aspirin, IV heparin protocol initiated.</medications>
+        <prognosis>Stable overnight in cardiac ICU. Discharge expected in 4 days.</prognosis>
+      </clinical_notes>
+    </medical_history>
+    <billing>
+      <card_number>4111-2222-3333-4444</card_number>
+      <cvv>912</cvv>
+      <amount>8450.00</amount>
+      <currency>USD</currency>
+      <plan>Executive-Care-Plus</plan>
+    </billing>
+    <assigned_doctor>
+      <doctor_id>DOC-771</doctor_id>
+      <name>Dr. Gregory House</name>
+      <department>Cardiology</department>
+    </assigned_doctor>
+  </patient>
+  <patient id="BIO-90211">
+    <personal_info>
+      <name>Marcus Kane</name>
+      <dob>1982-05-19</dob>
+      <ssn>456-78-1234</ssn>
+      <contact>
+        <email>marcus.kane@biomail.com</email>
+        <phone>+1-555-442-7711</phone>
+        <address>
+          <street>100 Innovation Way</street>
+          <city>Bellevue</city>
+          <zip>98004</zip>
+        </address>
+      </contact>
+    </personal_info>
+    <medical_history>
+      <diagnosis>E11.65</diagnosis>
+      <bloodpressure>135.0</bloodpressure>
+      <heart_rate>76</heart_rate>
+      <clinical_notes>
+        <admission>Type 2 diabetes with severe hyperglycemia.</admission>
+        <medications>Adjusted subcutaneous insulin lispro dosage.</medications>
+        <prognosis>Glucose levels stabilized under 140 mg/dL.</prognosis>
+      </clinical_notes>
+    </medical_history>
+    <billing>
+      <card_number>5500-0000-0000-8888</card_number>
+      <cvv>345</cvv>
+      <amount>2100.50</amount>
+      <currency>USD</currency>
+      <plan>Standard-Care</plan>
+    </billing>
+    <assigned_doctor>
+      <doctor_id>DOC-902</doctor_id>
+      <name>Dr. Allison Cameron</name>
+      <department>Endocrinology</department>
+    </assigned_doctor>
+  </patient>
+</patients>

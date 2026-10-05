@@ -1,0 +1,84 @@
+services:
+  # ── PostgreSQL Multi-Tenant Relational Store ────────────────────────────────
+  postgres:
+    image: postgres:15-alpine
+    container_name: masking_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: masking_admin
+      POSTGRES_PASSWORD: masking_secure_password
+      POSTGRES_DB: masking_db
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U masking_admin -d masking_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ── Redis 7 Distributed Cache & Pub/Sub Mesh ─────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: masking_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ── Mock Enterprise IdP (Tenant A: Acme Corp) ───────────────────────────────
+  mock-idp-tenant-a:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: idp_acme_corp
+    command: ["python", "scripts/mock_idp_server.py"]
+    environment:
+      IDP_REALM: "acme-corp"
+      PORT: "8081"
+      IDP_ISSUER_URL: "http://mock-idp-tenant-a:8081"
+    ports:
+      - "8081:8081"
+
+  # ── Mock Enterprise IdP (Tenant B: Beta Health) ─────────────────────────────
+  mock-idp-tenant-b:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: idp_beta_health
+    command: ["python", "scripts/mock_idp_server.py"]
+    environment:
+      IDP_REALM: "beta-health"
+      PORT: "8082"
+      IDP_ISSUER_URL: "http://mock-idp-tenant-b:8082"
+    ports:
+      - "8082:8082"
+
+  # ── Multi-Tenant Data Masking Engine (Data Plane & Control Plane) ───────────
+  masking-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: masking_service
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: "postgresql+asyncpg://masking_admin:masking_secure_password@postgres:5432/masking_db"
+      REDIS_URL: "redis://redis:6379/0"
+      SECRET_KEY: "enterprise-production-encryption-secret-key-32b"
+      APP_LOG_LEVEL: "INFO"
+      ADMIN_TOKEN: "admin-master-secret-token"
+
+volumes:
+  pgdata:

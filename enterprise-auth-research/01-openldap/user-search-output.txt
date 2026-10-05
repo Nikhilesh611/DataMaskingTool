@@ -1,0 +1,82 @@
+# OpenLDAP User Search Outputs (Redacted)
+# Status: OBSERVED (captured from live OpenLDAP container)
+
+=== Search: (uid=alice) ===
+# extended LDIF
+#
+# LDAPv3
+# base <ou=People,dc=lab,dc=local> with scope subtree
+# filter: (uid=alice)
+# requesting: ALL
+#
+
+# alice, People, lab.local
+dn: uid=alice,ou=People,dc=lab,dc=local
+objectClass: inetOrgPerson
+objectClass: posixAccount
+objectClass: shadowAccount
+cn: Alice Smith
+sn: Smith
+givenName: Alice
+uid: alice
+uidNumber: 1001
+gidNumber: 1001
+homeDirectory: /home/alice
+mail: alice@lab.local
+userPassword:: [REDACTED_PASSWORD_HASH]
+
+# search result
+search: 2
+result: 0 Success
+
+# numResponses: 2
+# numEntries: 1
+
+
+=== Search: (uid=bob) ===
+# extended LDIF
+#
+# LDAPv3
+# base <ou=People,dc=lab,dc=local> with scope subtree
+# filter: (uid=bob)
+# requesting: ALL
+#
+
+# bob, People, lab.local
+dn: uid=bob,ou=People,dc=lab,dc=local
+objectClass: inetOrgPerson
+objectClass: posixAccount
+objectClass: shadowAccount
+cn: Bob Jones
+sn: Jones
+givenName: Bob
+uid: bob
+uidNumber: 1002
+gidNumber: 1002
+homeDirectory: /home/bob
+mail: bob@lab.local
+userPassword:: [REDACTED_PASSWORD_HASH]
+
+# search result
+search: 2
+result: 0 Success
+
+# numResponses: 2
+# numEntries: 1
+
+
+=== Search: (uid=charlie) [Nonexistent User] ===
+# extended LDIF
+#
+# LDAPv3
+# base <ou=People,dc=lab,dc=local> with scope subtree
+# filter: (uid=charlie)
+# requesting: ALL
+#
+
+# search result
+search: 2
+result: 0 Success
+
+# numResponses: 1
+# numEntries: 0

@@ -1,0 +1,62 @@
+# Direct LDAP Authentication Test Runs
+# Status: OBSERVED (executed via Python ldap3 client against local OpenLDAP)
+
+=== Test Run 1: Alice (Correct Password: [REDACTED]) ===
+Input: username="alice", password="[REDACTED]"
+Result:
+{
+  "authenticated": true,
+  "dn": "uid=alice,ou=People,dc=lab,dc=local",
+  "username": "alice",
+  "attributes": {
+    "cn": ["Alice Smith"],
+    "gidNumber": [1001],
+    "givenName": ["Alice"],
+    "mail": ["alice@lab.local"],
+    "sn": ["Smith"],
+    "uid": ["alice"],
+    "uidNumber": [1001]
+  },
+  "groups": ["finance"],
+  "token_returned_by_ldap": null
+}
+
+=== Test Run 2: Alice (Wrong Password: [WRONG]) ===
+Input: username="alice", password="[WRONG]"
+Result:
+{
+  "authenticated": false,
+  "error": "Invalid credentials",
+  "ldap_result_code": 49,
+  "ldap_description": "invalidCredentials",
+  "error_code": "INVALID_CREDENTIALS"
+}
+
+=== Test Run 3: Charlie (Unknown User) ===
+Input: username="charlie", password="[PASSWORD]"
+Result:
+{
+  "authenticated": false,
+  "error": "User not found in directory",
+  "error_code": "USER_NOT_FOUND"
+}
+
+=== Test Run 4: Bob (Correct Password: [REDACTED]) ===
+Input: username="bob", password="[REDACTED]"
+Result:
+{
+  "authenticated": true,
+  "dn": "uid=bob,ou=People,dc=lab,dc=local",
+  "username": "bob",
+  "attributes": {
+    "cn": ["Bob Jones"],
+    "gidNumber": [1002],
+    "givenName": ["Bob"],
+    "mail": ["bob@lab.local"],
+    "sn": ["Jones"],
+    "uid": ["bob"],
+    "uidNumber": [1002]
+  },
+  "groups": ["security"],
+  "token_returned_by_ldap": null
+}

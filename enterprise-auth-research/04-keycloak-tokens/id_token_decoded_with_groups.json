@@ -1,0 +1,30 @@
+{
+  "header": {
+    "alg": "RS256",
+    "typ": "JWT",
+    "kid": "r86N9dQ5OkPX_CiSmhyLAAgh97oluY6jSRlzLGF24kY"
+  },
+  "payload": {
+    "exp": 1787702277,
+    "iat": 1787701977,
+    "jti": "0f2b6f31-4b02-4304-9da3-2a44ebf29f64",
+    "iss": "http://localhost:8081/realms/lab-realm",
+    "aud": "lab-client",
+    "sub": "4e2dae28-abd5-49e5-a890-8a54eae8bb57",
+    "typ": "ID",
+    "azp": "lab-client",
+    "sid": "99907a8d-4211-45c4-a467-f4ac29989033",
+    "at_hash": "xTP44bltYbTAUtGwIBOhDg",
+    "acr": "1",
+    "email_verified": true,
+    "name": "Alice User",
+    "groups": [
+      "finance"
+    ],
+    "preferred_username": "alice",
+    "given_name": "Alice",
+    "family_name": "User",
+    "email": "alice@lab.local"
+  },
+  "signature_raw_length_bytes": 342
+}

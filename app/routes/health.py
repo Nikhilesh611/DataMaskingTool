@@ -17,7 +17,11 @@ router = APIRouter(tags=["health"])
 @router.get("/health")
 async def health() -> JSONResponse:
     settings = get_settings()
-    policy = get_policy()
+    try:
+        policy = get_policy()
+        policy_version = policy.version
+    except RuntimeError:
+        policy_version = "dynamic-multitenant"
 
     # Count files in the data directory.
     try:
@@ -32,7 +36,7 @@ async def health() -> JSONResponse:
     return JSONResponse(
         {
             "status": "ok",
-            "policy_version": policy.version,
+            "policy_version": policy_version,
             "supported_formats": supported_formats(),
             "data_dir": settings.data_dir,
             "file_count": file_count,

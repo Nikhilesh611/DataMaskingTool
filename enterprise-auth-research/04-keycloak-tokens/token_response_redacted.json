@@ -1,0 +1,11 @@
+{
+  "access_token": "[REDACTED_ACCESS_TOKEN_JWT]",
+  "expires_in": 300,
+  "refresh_expires_in": 1800,
+  "refresh_token": "[REDACTED_REFRESH_TOKEN_JWT]",
+  "token_type": "Bearer",
+  "id_token": "[REDACTED_ID_TOKEN_JWT]",
+  "not-before-policy": 0,
+  "session_state": "5bc0269b-ae8d-4d0a-b3ac-f6216397187f",
+  "scope": "openid profile email"
+}

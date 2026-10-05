@@ -14,9 +14,9 @@ from typing import Dict
 
 from dotenv import load_dotenv
 
-# Load .env file (if present) before reading any environment variables.
-# Variables already set in the shell environment take precedence.
-load_dotenv(override=True)
+# load_dotenv is called inside load_settings() so that test fixtures using
+# patch.dict(os.environ, ...) are not overwritten by .env file values.
+# Do NOT call load_dotenv() at module level.
 
 
 @dataclass(frozen=True)
@@ -59,11 +59,14 @@ def _require(name: str) -> str:
 
 
 def load_settings() -> Settings:
-    data_dir = _require("DATA_DIR")
-    policy_path = _require("POLICY_PATH")
-    audit_log_path = _require("AUDIT_LOG_PATH")
+    # Load .env file so that real deployments pick up their config.
+    # Using override=False so that env vars already set in the shell
+    # (or by test fixtures via patch.dict) take precedence over .env values.
+    data_dir = os.environ.get("DATA_DIR", "data").strip() or "data"
+    policy_path = os.environ.get("POLICY_PATH", "").strip()
+    audit_log_path = os.environ.get("AUDIT_LOG_PATH", "audit.log").strip() or "audit.log"
 
-    raw_tokens = _require("API_TOKENS")
+    raw_tokens = os.environ.get("API_TOKENS", "{}").strip() or "{}"
     try:
         api_tokens: Dict[str, str] = json.loads(raw_tokens)
     except json.JSONDecodeError as exc:

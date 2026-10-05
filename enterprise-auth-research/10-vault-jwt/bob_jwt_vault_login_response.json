@@ -1,0 +1,35 @@
+{
+  "status_code": 200,
+  "response": {
+    "request_id": "b4e0d670-fd82-f3d7-4e67-2e5966c3bc0f",
+    "lease_id": "",
+    "renewable": false,
+    "lease_duration": 0,
+    "data": null,
+    "wrap_info": null,
+    "warnings": null,
+    "auth": {
+      "client_token": "[REDACTED_VAULT_TOKEN]",
+      "accessor": "440Ii0mB3XcvPjmsKCq4mySd",
+      "policies": [
+        "default",
+        "security-policy"
+      ],
+      "token_policies": [
+        "default",
+        "security-policy"
+      ],
+      "metadata": {
+        "role": "security-role"
+      },
+      "lease_duration": 3600,
+      "renewable": true,
+      "entity_id": "1fbd944e-d01f-b124-fa9f-651f64a8f19e",
+      "token_type": "service",
+      "orphan": true,
+      "mfa_requirement": null,
+      "num_uses": 0
+    },
+    "mount_type": ""
+  }
+}

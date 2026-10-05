@@ -1,0 +1,76 @@
+# OpenLDAP Group Search Outputs
+# Status: OBSERVED (captured from live OpenLDAP container)
+
+=== Search: All Groups (objectClass=groupOfNames) ===
+# extended LDIF
+#
+# LDAPv3
+# base <ou=Groups,dc=lab,dc=local> with scope subtree
+# filter: (objectClass=groupOfNames)
+# requesting: ALL
+#
+
+# finance, Groups, lab.local
+dn: cn=finance,ou=Groups,dc=lab,dc=local
+objectClass: groupOfNames
+cn: finance
+member: uid=alice,ou=People,dc=lab,dc=local
+
+# security, Groups, lab.local
+dn: cn=security,ou=Groups,dc=lab,dc=local
+objectClass: groupOfNames
+cn: security
+member: uid=bob,ou=People,dc=lab,dc=local
+
+# search result
+search: 2
+result: 0 Success
+
+# numResponses: 3
+# numEntries: 2
+
+
+=== Query: Alice's Groups (&(objectClass=groupOfNames)(member=uid=alice,ou=People,dc=lab,dc=local)) ===
+# extended LDIF
+#
+# LDAPv3
+# base <ou=Groups,dc=lab,dc=local> with scope subtree
+# filter: (&(objectClass=groupOfNames)(member=uid=alice,ou=People,dc=lab,dc=local))
+# requesting: ALL
+#
+
+# finance, Groups, lab.local
+dn: cn=finance,ou=Groups,dc=lab,dc=local
+objectClass: groupOfNames
+cn: finance
+member: uid=alice,ou=People,dc=lab,dc=local
+
+# search result
+search: 2
+result: 0 Success
+
+# numResponses: 2
+# numEntries: 1
+
+
+=== Query: Bob's Groups (&(objectClass=groupOfNames)(member=uid=bob,ou=People,dc=lab,dc=local)) ===
+# extended LDIF
+#
+# LDAPv3
+# base <ou=Groups,dc=lab,dc=local> with scope subtree
+# filter: (&(objectClass=groupOfNames)(member=uid=bob,ou=People,dc=lab,dc=local))
+# requesting: ALL
+#
+
+# security, Groups, lab.local
+dn: cn=security,ou=Groups,dc=lab,dc=local
+objectClass: groupOfNames
+cn: security
+member: uid=bob,ou=People,dc=lab,dc=local
+
+# search result
+search: 2
+result: 0 Success
+
+# numResponses: 2
+# numEntries: 1

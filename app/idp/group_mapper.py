@@ -20,6 +20,12 @@ Translation chain:
         → scope.roles["auditor"].profile = "card_data"
         → masking pipeline applies card_data rules
 
+    Multi-tenant chain (Phase 2):
+        JWT claim "groups": ["finance-team"]
+            → resolve_role_for_tenant(["finance-team"], tenant_id, db)
+            → MaskingPolicy.name = "Finance Restricted" (stored in DB)
+            → returned as internal_role to the masking pipeline
+
 Multiple-group resolution:
     When a user belongs to multiple IdP groups, exactly one internal role must
     be selected.  The strategy is explicit priority ordering:
@@ -32,17 +38,16 @@ Multiple-group resolution:
       - This is deterministic and not dependent on JWT claim order.
 
 Fail-closed:
-    If no group in the user's list has a mapping, resolve_role() returns None.
-    The caller (auth layer) must treat None as HTTP 403 — not as a fallback to
-    unmasked access.
+    If no group in the user's list has a mapping, both resolve_role() and
+    resolve_role_for_tenant() return None.  The caller (auth layer) must treat
+    None as HTTP 403 — not as a fallback to unmasked access.
 
 Persistence:
-    Mappings are stored in a JSON file (IDP_MAPPINGS_PATH).  The file is
-    loaded once at startup.  The store is the in-memory cache; the file is the
-    source of persistence across restarts.
+    Single-tenant mode: mappings are stored in a JSON file (IDP_MAPPINGS_PATH).
+    Multi-tenant mode: mappings are stored in the ``group_mappings`` DB table,
+    keyed by ``tenant_id``.  The DB-backed path is used by Phase 2 routes.
 
-    Phase 2 will add a small admin API to update mappings at runtime without
-    requiring a server restart.
+    Phase 2 admin API can manage mappings at runtime without a server restart.
 """
 
 from __future__ import annotations
@@ -50,7 +55,10 @@ from __future__ import annotations
 import json
 import os
 from dataclasses import asdict, dataclass, field
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 
 # ── Data model ────────────────────────────────────────────────────────────────
@@ -194,3 +202,82 @@ def set_group_mapping_store(store: GroupMappingStore) -> None:
     """Replace the module-level store — used in tests."""
     global _store
     _store = store
+
+
+# ── Multi-tenant DB-backed resolution (Phase 2) ────────────────────────────────
+
+async def resolve_role_and_policy_for_tenant(
+    groups: list[str],
+    tenant_id: str,
+    db: "AsyncSession",
+) -> tuple[str, Any] | None:
+    """Resolve both the internal role name and parsed MaskingPolicy for *groups*.
+
+    Queries the ``group_mappings`` table joined with ``masking_policies`` filtered by *tenant_id*.
+    Retrieves the parsed policy from L1 cache (key: ``tenant:<tenant_id>:policy:<policy_id>``)
+    or compiles it from ``policy_yaml`` in the database and caches it.
+    """
+    if not groups:
+        return None
+
+    from sqlalchemy import select
+    from app.db.models import GroupMapping, MaskingPolicy
+    from app.cache.l1_cache import get_l1_cache
+    from app.policy.loader import load_policy_from_string
+
+    result = await db.execute(
+        select(GroupMapping, MaskingPolicy)
+        .join(MaskingPolicy, MaskingPolicy.id == GroupMapping.policy_id)
+        .where(GroupMapping.tenant_id == tenant_id)
+        .where(GroupMapping.external_group.in_(groups))
+        .where(MaskingPolicy.is_active.is_(True))
+        .order_by(GroupMapping.priority.asc(), GroupMapping.created_at.asc())
+        .limit(1)
+    )
+    row = result.first()
+    if row is None:
+        return None
+
+    mapping, policy_db = row
+    parsed = None
+    if policy_db.policy_yaml:
+        try:
+            cache_key = f"tenant:{tenant_id}:policy:{policy_db.id}"
+            cache = get_l1_cache()
+            parsed = cache.get(cache_key)
+            if parsed is None:
+                parsed = load_policy_from_string(policy_db.policy_yaml)
+                cache.set(cache_key, parsed)
+        except Exception:
+            parsed = None
+
+    # Determine internal role:
+    # 1. Use explicit mapping.internal_role if set by admin
+    # 2. Fall back to policy_db.name if it matches a role in policy.roles
+    # 3. Fall back to the first defined role in policy.roles
+    # 4. If policy has no roles defined (universal policy), use "default"
+    assigned_role = mapping.internal_role
+    if not assigned_role:
+        if parsed and parsed.roles:
+            if policy_db.name in parsed.roles:
+                assigned_role = policy_db.name
+            else:
+                assigned_role = next(iter(parsed.roles.keys()))
+        else:
+            assigned_role = "default"
+
+    return assigned_role, parsed
+
+
+async def resolve_role_for_tenant(
+    groups: list[str],
+    tenant_id: str,
+    db: "AsyncSession",
+) -> Optional[str]:
+    """Resolve the internal masking role for *groups* using the database.
+
+    Queries the ``group_mappings`` table filtered strictly by *tenant_id*, then
+    applies priority ordering.
+    """
+    res = await resolve_role_and_policy_for_tenant(groups, tenant_id, db)
+    return res[0] if res else None

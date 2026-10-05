@@ -6,6 +6,7 @@ The pipeline never imports lxml directly.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Any, Iterable, List
 
@@ -33,12 +34,20 @@ class XMLAdapter(FormatAdapter):
 
     # ── Parsing / serialisation ───────────────────────────────────────────────
 
+    # Hardened parser: no external entities, no DTD loading, no network access.
+    # This fully blocks XXE (XML External Entity) injection attacks.
+    _PARSER = etree.XMLParser(
+        resolve_entities=False,
+        load_dtd=False,
+        no_network=True,
+        huge_tree=False,  # block billion-laughs / deeply nested bombs
+    )
+
     def parse(self, raw: bytes) -> XMLTreeWrapper:
         try:
-            tree = etree.fromstring(raw)
+            tree = etree.fromstring(raw, parser=self._PARSER)
             return XMLTreeWrapper(tree)
         except etree.XMLSyntaxError as exc:
-            # lxml provides line/column information in the exception.
             location = f"line {exc.lineno}, col {exc.offset}" if exc.lineno else None
             raise ParseError(
                 filename="<unknown>",
@@ -50,7 +59,7 @@ class XMLAdapter(FormatAdapter):
     def parse_with_filename(self, raw: bytes, filename: str) -> XMLTreeWrapper:
         """Variant that records the filename in any ParseError for cleaner logs."""
         try:
-            tree = etree.fromstring(raw)
+            tree = etree.fromstring(raw, parser=self._PARSER)
             return XMLTreeWrapper(tree)
         except etree.XMLSyntaxError as exc:
             location = f"line {exc.lineno}, col {exc.offset}" if exc.lineno else None
@@ -160,19 +169,47 @@ class XMLAdapter(FormatAdapter):
     # ── Selector evaluation ───────────────────────────────────────────────────
 
     def select(self, tree: XMLTreeWrapper, selector: str) -> List[etree._Element]:
-        """Evaluate an XPath 1.0 expression against *tree*."""
+        """Evaluate an XPath 1.0 expression against *tree*.
+
+        Namespace handling
+        ------------------
+        If the selector contains ``local-name()`` it is used as-is (the
+        caller already wrote a namespace-agnostic expression).  Otherwise, if
+        the document has a default namespace, selectors without a prefix may
+        match nothing; in that case we automatically re-evaluate the selector
+        using ``*[local-name()='tag']`` style expansion so enterprise XML
+        schemas with default namespaces work without policy changes.
+        """
         try:
             if isinstance(tree, XMLTreeWrapper):
                 results = tree.root.xpath(selector)
             else:
-                # Handle case where a raw lxml element is passed 
-                # (e.g. kanon.py uses select() relative to individual nodes)
                 results = tree.xpath(selector)
-        except etree.XPathEvalError as exc:
-            # Invalid XPath — return empty list rather than crashing.
+        except etree.XPathEvalError:
             return []
-        # XPath can return text nodes (strings) as well as elements.
-        # We wrap attributes in XMLAttributeNode and only return mutatable nodes.
+        except etree.XPathSyntaxError:
+            return []
+
+        # If nothing matched and the document has a default namespace, retry
+        # with a namespace-stripped selector (local-name() strategy).
+        if not results and isinstance(tree, XMLTreeWrapper):
+            root_ns = tree.root.nsmap.get(None)
+            if root_ns and "local-name" not in selector:
+                ns_selector = re.sub(
+                    r"(?<![:\w])([A-Za-z_][\w\-]*)",
+                    lambda m: f"*[local-name()='{m.group(1)}']"
+                    if m.group(1) not in ("and", "or", "not", "div", "mod")
+                    else m.group(1),
+                    selector,
+                )
+                try:
+                    if isinstance(tree, XMLTreeWrapper):
+                        results = tree.root.xpath(ns_selector)
+                    else:
+                        results = tree.xpath(ns_selector)
+                except (etree.XPathEvalError, etree.XPathSyntaxError):
+                    results = []
+
         nodes = []
         for r in results:
             if isinstance(r, etree._Element):

@@ -2,7 +2,12 @@
 
 Caching strategy:
     JWKS are expensive to fetch (network round-trip) and rarely change.
-    We keep a simple in-memory cache keyed by JWKS URI.
+    We keep a simple in-memory cache keyed by ``(tenant_id, jwks_uri)``.
+
+    Partitioning by tenant_id is a security invariant: Tenant A's public keys
+    must NEVER be used to verify Tenant B's tokens, even if both happen to use
+    the same JWKS URI (unlikely in production, but the cache must be safe
+    regardless).
 
     TTL is configurable (IDP_JWKS_CACHE_TTL_SECONDS, default 300 s).
     The TTL is a *reasonable operational default*, not a hard security
@@ -77,27 +82,53 @@ class JWKSCache:
 
     FastAPI/uvicorn runs in a single asyncio event loop per worker, so a plain
     dict is safe here — no concurrent writes from multiple threads.
+
+    Cache key
+    ---------
+    The cache is keyed by ``(tenant_id, jwks_uri)`` — a 2-tuple — so that two
+    tenants sharing the same JWKS URI (unlikely, but possible) can never share
+    key material.  Single-tenant callers pass an empty string for ``tenant_id``.
     """
 
     def __init__(self, ttl_seconds: int = 300) -> None:
         self._ttl = ttl_seconds
-        self._store: dict[str, _CacheEntry] = {}
+        # Key: (tenant_id, jwks_uri) → _CacheEntry
+        self._store: dict[tuple[str, str], _CacheEntry] = {}
 
     def _is_expired(self, entry: _CacheEntry) -> bool:
         return (time.monotonic() - entry.fetched_at) > self._ttl
 
-    def get_cached(self, jwks_uri: str) -> list[dict[str, Any]] | None:
-        """Return cached keys if present and not expired, else None."""
-        entry = self._store.get(jwks_uri)
+    def _key(self, jwks_uri: str, tenant_id: str = "") -> tuple[str, str]:
+        return (tenant_id, jwks_uri)
+
+    def get_cached(
+        self, jwks_uri: str, tenant_id: str = ""
+    ) -> list[dict[str, Any]] | None:
+        """Return cached keys for ``(tenant_id, jwks_uri)`` if present and not expired."""
+        entry = self._store.get(self._key(jwks_uri, tenant_id))
         if entry is None or self._is_expired(entry):
             return None
         return entry.keys
 
-    def set(self, jwks_uri: str, keys: list[dict[str, Any]]) -> None:
-        self._store[jwks_uri] = _CacheEntry(keys=keys)
+    def set(
+        self, jwks_uri: str, keys: list[dict[str, Any]], tenant_id: str = ""
+    ) -> None:
+        """Store *keys* under the ``(tenant_id, jwks_uri)`` slot."""
+        self._store[self._key(jwks_uri, tenant_id)] = _CacheEntry(keys=keys)
 
-    def invalidate(self, jwks_uri: str) -> None:
-        self._store.pop(jwks_uri, None)
+    def invalidate(self, jwks_uri: str, tenant_id: str = "") -> None:
+        """Evict the entry for ``(tenant_id, jwks_uri)``."""
+        self._store.pop(self._key(jwks_uri, tenant_id), None)
+
+    def invalidate_tenant(self, tenant_id: str) -> None:
+        """Evict ALL cached key-sets belonging to *tenant_id*.
+
+        Called when a tenant's IdP configuration changes so no stale public
+        keys remain for that tenant.
+        """
+        stale = [k for k in self._store if k[0] == tenant_id]
+        for k in stale:
+            del self._store[k]
 
     def clear(self) -> None:
         """Clear the entire cache — used in tests only."""
@@ -144,18 +175,30 @@ async def _fetch_jwks_raw(jwks_uri: str) -> list[dict[str, Any]]:
 
 # ── Public API ────────────────────────────────────────────────────────────────
 
-async def get_signing_key(jwks_uri: str, kid: str | None) -> dict[str, Any]:
+async def get_signing_key(
+    jwks_uri: str,
+    kid: str | None,
+    *,
+    tenant_id: str = "",
+) -> dict[str, Any]:
     """Return the JWK dict for *kid* from *jwks_uri*, using the cache.
 
     Resolution order
     ----------------
-    1. Check in-memory cache (if not expired).
+    1. Check in-memory cache under ``(tenant_id, jwks_uri)`` (if not expired).
     2. If kid is not in cache, force-refresh once from the IdP.
     3. If kid is still missing after refresh → raise JWKSKeyNotFoundError.
 
-    If *kid* is None (JWT header has no kid):
-        Return the first key in the JWKS.  This supports IdPs that issue JWTs
-        without a kid when they have only one active signing key.
+    Parameters
+    ----------
+    jwks_uri:
+        The JWKS endpoint URL.
+    kid:
+        The ``kid`` header from the JWT.  If ``None`` (JWT has no kid), the
+        first key in the set is returned — supports IdPs with a single key.
+    tenant_id:
+        Tenant identifier used as the cache partition key.  Defaults to ``""``
+        for backward-compatible single-tenant callers.
 
     Raises
     ------
@@ -171,8 +214,8 @@ async def get_signing_key(jwks_uri: str, kid: str | None) -> dict[str, Any]:
             return keys[0] if keys else None
         return next((k for k in keys if k.get("kid") == kid), None)
 
-    # ── Step 1: Check cache ───────────────────────────────────────────────────
-    cached_keys = cache.get_cached(jwks_uri)
+    # ── Step 1: Check tenant-partitioned cache ────────────────────────────────
+    cached_keys = cache.get_cached(jwks_uri, tenant_id=tenant_id)
     if cached_keys is not None:
         key = _find_key(cached_keys)
         if key is not None:
@@ -181,7 +224,7 @@ async def get_signing_key(jwks_uri: str, kid: str | None) -> dict[str, Any]:
 
     # ── Step 2: Force fetch (cache miss or kid miss) ──────────────────────────
     fresh_keys = await _fetch_jwks_raw(jwks_uri)
-    cache.set(jwks_uri, fresh_keys)
+    cache.set(jwks_uri, fresh_keys, tenant_id=tenant_id)
 
     key = _find_key(fresh_keys)
     if key is None:
