@@ -191,20 +191,21 @@ rules:
         p = MaskingPolicy(tenant_id=tenant.id, name="default", policy_yaml=dev_yaml, is_active=True)
         db.add(p)
 
-    # 6. Generate initial API key for the workspace
-    import hashlib
-    raw_secret = f"dm_live_{secrets.token_urlsafe(32)}"
-    key_prefix = raw_secret[:12]
-    key_hash = hashlib.sha256(raw_secret.encode("utf-8")).hexdigest()
-    api_key_obj = ApiKey(
-        tenant_id=tenant.id,
-        name=f"{req.organization_name} Primary Key",
-        key_prefix=key_prefix,
-        key_hash=key_hash,
-        role="analyst",
-        is_active=True,
-    )
-    db.add(api_key_obj)
+    # 6. Generate initial API key for developer workspace only
+    if req.account_type == "developer":
+        import hashlib
+        raw_secret = f"dm_live_{secrets.token_urlsafe(32)}"
+        key_prefix = raw_secret[:12]
+        key_hash = hashlib.sha256(raw_secret.encode("utf-8")).hexdigest()
+        api_key_obj = ApiKey(
+            tenant_id=tenant.id,
+            name=f"{req.organization_name} Primary Key",
+            key_prefix=key_prefix,
+            key_hash=key_hash,
+            role="default",
+            is_active=True,
+        )
+        db.add(api_key_obj)
 
     await db.commit()
     await db.refresh(user)
