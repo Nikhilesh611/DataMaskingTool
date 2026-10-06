@@ -2,6 +2,24 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { Terminal, Shield, Key, Play, Copy, Check, Plus, Trash2, RefreshCw } from 'lucide-react';
 
+const DEFAULT_DEV_POLICY = `# Developer Default Masking Policy
+
+rules:
+  - selector: "$..ssn"
+    technique: "redact"
+
+  - selector: "$..credit_card"
+    technique: "mask_pattern"
+    pattern: "****-****-****-{last4}"
+
+  - selector: "$..salary"
+    technique: "noise"
+
+  - selector: "$..email"
+    technique: "pseudonymize"
+    consistent: true
+`;
+
 export default function DeveloperWorkspace() {
   const { user, activeKey } = useAuth();
   const [activeTab, setActiveTab] = useState('quickstart'); // 'quickstart' | 'policy' | 'keys' | 'console'
@@ -9,8 +27,8 @@ export default function DeveloperWorkspace() {
   // Data states
   const [keys, setKeys] = useState([]);
   const [primaryKey, setPrimaryKey] = useState(activeKey || '');
-  const [policyYaml, setPolicyYaml] = useState('');
-  const [policyName, setPolicyName] = useState('analyst');
+  const [policyYaml, setPolicyYaml] = useState(DEFAULT_DEV_POLICY);
+  const [policyName, setPolicyName] = useState('default');
   const [policyStatus, setPolicyStatus] = useState('');
 
   // Console states
@@ -53,6 +71,23 @@ export default function DeveloperWorkspace() {
         if (Array.isArray(polData) && polData.length > 0) {
           setPolicyYaml(polData[0].policy_yaml);
           setPolicyName(polData[0].name);
+        } else {
+          // Auto-save the default developer policy so the workspace is immediately ready
+          setPolicyYaml(DEFAULT_DEV_POLICY);
+          setPolicyName('default');
+          try {
+            await fetch(`/api/v1/admin/tenants/${user.tenant_id}/policies`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                name: 'default',
+                policy_yaml: DEFAULT_DEV_POLICY,
+                is_active: true
+              }),
+            });
+          } catch (e) {
+            console.warn("Could not auto-save default developer policy:", e);
+          }
         }
       }
     } catch (err) {

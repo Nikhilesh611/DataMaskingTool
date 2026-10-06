@@ -1,0 +1,24 @@
+python scripts/enterprise_idp.py start --port 8086 --realm biocorp
+
+python -m uvicorn app.main:app --port 8000 --reload
+
+
+
+Call 1:
+$token = (Invoke-RestMethod -Method POST -Uri "http://localhost:8086/token" -ContentType "application/json" -Body '{"sub":"dr.smith@biocorp.com","groups":["biocorp-researchers"],"aud":"masking-api"}').access_token
+
+$payload = Get-Content "data/biocorp_payload.json" -Raw
+
+$response = Invoke-RestMethod -Method POST -Uri "http://127.0.0.1:8000/v1/mask" -Headers @{ Authorization = "Bearer $token" } -ContentType "application/json" -Body $payload
+
+$response.patients[0] | ConvertTo-Json -Depth 6
+
+
+Call2:
+$token = (Invoke-RestMethod -Method POST -Uri "http://localhost:8086/token" -ContentType "application/json" -Body '{"sub":"adjuster@anthem.com","groups":["biocorp-insurers"],"aud":"masking-api"}').access_token
+
+$payload = Get-Content "data/biocorp_payload.json" -Raw
+
+$response = Invoke-RestMethod -Method POST -Uri "http://127.0.0.1:8000/v1/mask" -Headers @{ Authorization = "Bearer $token" } -ContentType "application/json" -Body $payload
+
+$response.patients[0] | ConvertTo-Json -Depth 6

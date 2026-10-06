@@ -166,60 +166,29 @@ async def signup(
 
     # 5. Automatically provision standard initial policy
     if req.account_type == "enterprise":
-        analyst_yaml = """version: "3.0"
-record_root: "$"
-roles:
-  analyst: {}
-rules:
-  - selector: "$..ssn"
-    technique: "suppress"
-  - selector: "$..salary"
-    technique: "redact"
-  - selector: "$..credit_card"
-    technique: "mask_pattern"
-    pattern: "****-****-****-{last4}"
-  - selector: "$..email"
-    technique: "redact"
-"""
-        auditor_yaml = """version: "3.0"
-record_root: "$"
-roles:
-  auditor: {}
-rules:
-  - selector: "$..ssn"
-    technique: "pseudonymize"
-    consistent: true
-  - selector: "$..salary"
-    technique: "redact"
-  - selector: "$..credit_card"
-    technique: "mask_pattern"
-    pattern: "XXXX-XXXX-XXXX-{last4}"
-  - selector: "$..email"
-    technique: "pseudonymize"
-    consistent: true
-"""
-        p1 = MaskingPolicy(tenant_id=tenant.id, name="analyst", policy_yaml=analyst_yaml, is_active=True)
-        p2 = MaskingPolicy(tenant_id=tenant.id, name="auditor", policy_yaml=auditor_yaml, is_active=True)
-        db.add_all([p1, p2])
+        # Enterprise admins configure their own unified multi-role policy.
+        # No misleading dummy single-role policies are preloaded.
+        pass
     else:
-        # Solo Developer default policy
-        dev_yaml = """version: "3.0"
-record_root: "$"
-roles:
-  analyst: {}
+        # Solo Developer standard starter policy
+        dev_yaml = """# Developer Default Masking Policy
+
 rules:
   - selector: "$..ssn"
-    technique: "suppress"
-  - selector: "$..salary"
     technique: "redact"
+
   - selector: "$..credit_card"
     technique: "mask_pattern"
     pattern: "****-****-****-{last4}"
+
+  - selector: "$..salary"
+    technique: "noise"
+
   - selector: "$..email"
     technique: "pseudonymize"
     consistent: true
 """
-        p = MaskingPolicy(tenant_id=tenant.id, name="analyst", policy_yaml=dev_yaml, is_active=True)
+        p = MaskingPolicy(tenant_id=tenant.id, name="default", policy_yaml=dev_yaml, is_active=True)
         db.add(p)
 
     # 6. Generate initial API key for the workspace

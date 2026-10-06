@@ -194,34 +194,97 @@ def mask_pattern(adapter: FormatAdapter, node: Any, *, pattern: str) -> None:
 
 # ── v2.0 subtree-level operations ────────────────────────────────────────────
 
-# Field-name → synthetic value lookup.  Keys are lowercase field name suffixes.
-SYNTHETIC_VALUES: dict[str, str] = {
-    "street":            "742 Evergreen Terrace",
-    "city":              "Springfield",
-    "zip":               "00000",
-    "zipcode":           "00000",
-    "postcode":          "00000",
-    "email":             "anon@synthetic.invalid",
-    "phone":             "+1-000-000-0000",
-    "mobile":            "+1-000-000-0001",
-    "name":              "[SYNTHETIC NAME]",
-    "firstname":         "[SYNTHETIC]",
-    "lastname":          "[SYNTHETIC]",
-    "amount":            "0.00",
-    "card_number":       "****-****-****-0000",
-    "cvv":               "***",
-    "cvc":               "***",
-    "note":              "[SYNTHETIC NOTE]",
-    "notes":             "[SYNTHETIC NOTES]",
-    "admission_note":    "[SYNTHETIC NOTE]",
-    "progress_note":     "[SYNTHETIC NOTE]",
-    "discharge_summary": "[SYNTHETIC NOTE]",
-    "ssn":               "***-**-****",
-    "dob":               "1900-01-01",
-    "address":           "[SYNTHETIC ADDRESS]",
-}
+_SYNTHETIC_STREET_NAMES = [
+    "Maple", "Oak", "Cedar", "Pine", "Highland", "Lincoln", "Washington",
+    "Sunset", "Lexington", "River", "Park", "Meadow", "Hillside", "Forest",
+    "Beacon", "Canyon", "Summit", "Fairview", "Willow", "Magnolia"
+]
+_SYNTHETIC_STREET_SUFFIXES = [
+    "Avenue", "Street", "Boulevard", "Drive", "Way", "Court", "Lane", "Road", "Terrace", "Circle"
+]
+_SYNTHETIC_CITIES = [
+    "Seattle", "Portland", "Austin", "Denver", "Chicago", "Boston", "Atlanta",
+    "San Diego", "Charlotte", "Minneapolis", "Dallas", "Phoenix", "Nashville",
+    "Columbus", "Salt Lake City", "Raleigh"
+]
+_SYNTHETIC_STATES = [
+    "WA", "OR", "TX", "CO", "IL", "MA", "GA", "CA", "NC", "MN", "FL", "NY"
+]
+_SYNTHETIC_FIRST_NAMES = [
+    "Alex", "Jordan", "Taylor", "Morgan", "Sam", "Chris", "Casey", "Avery",
+    "Cameron", "Quinn", "Riley", "Logan", "Kendall", "Skyler", "Reese"
+]
+_SYNTHETIC_LAST_NAMES = [
+    "Smith", "Johnson", "Williams", "Brown", "Jones", "Garcia", "Miller",
+    "Davis", "Rodriguez", "Martinez", "Hernandez", "Vance", "Mercer",
+    "Campbell", "Hawthorne", "Sterling", "Hayward"
+]
 
-DEFAULT_SYNTHETIC = "[SYNTHETIC]"
+def generate_synthetic_value(field_name: str, original_val: Any = None) -> Any:
+    """Generate realistic, diverse synthetic data dynamically based on field semantics and original value hash."""
+    seed_str = f"{field_name}:{original_val}" if original_val is not None else field_name
+    h = int(hashlib.sha256(seed_str.encode("utf-8")).hexdigest()[:8], 16)
+    rng = random.Random(h)
+
+    key = field_name.lower().replace("-", "_")
+
+    if any(k in key for k in ("street", "address_line", "line1", "address1")):
+        bldg = rng.randint(100, 9899)
+        name = rng.choice(_SYNTHETIC_STREET_NAMES)
+        suf = rng.choice(_SYNTHETIC_STREET_SUFFIXES)
+        return f"{bldg} {name} {suf}"
+
+    if "city" in key:
+        return rng.choice(_SYNTHETIC_CITIES)
+
+    if any(k in key for k in ("zip", "postal", "postcode")):
+        return f"{rng.randint(10001, 99950):05d}"
+
+    if any(k in key for k in ("state", "province")):
+        return rng.choice(_SYNTHETIC_STATES)
+
+    if any(k in key for k in ("first_name", "firstname", "fname")):
+        return rng.choice(_SYNTHETIC_FIRST_NAMES)
+
+    if any(k in key for k in ("last_name", "lastname", "lname", "surname")):
+        return rng.choice(_SYNTHETIC_LAST_NAMES)
+
+    if any(k in key for k in ("name", "full_name", "patient_name", "client_name")):
+        first = rng.choice(_SYNTHETIC_FIRST_NAMES)
+        last = rng.choice(_SYNTHETIC_LAST_NAMES)
+        return f"{first} {last}"
+
+    if "email" in key:
+        first = rng.choice(_SYNTHETIC_FIRST_NAMES).lower()
+        last = rng.choice(_SYNTHETIC_LAST_NAMES).lower()
+        num = rng.randint(10, 99)
+        return f"{first}.{last}{num}@synthetic-health.invalid"
+
+    if any(k in key for k in ("phone", "mobile", "tel", "cell")):
+        area = rng.randint(200, 989)
+        exchange = rng.randint(200, 899)
+        subscriber = rng.randint(1000, 9999)
+        return f"+1-{area}-{exchange}-{subscriber:04d}"
+
+    if any(k in key for k in ("card", "cc_num", "credit_card")):
+        return f"4{rng.randint(100, 999):03d}-{rng.randint(1000, 9999):04d}-{rng.randint(1000, 9999):04d}-{rng.randint(1000, 9999):04d}"
+
+    if any(k in key for k in ("cvv", "cvc", "security_code")):
+        return f"{rng.randint(100, 999):03d}"
+
+    if any(k in key for k in ("ssn", "social_security")):
+        return f"{rng.randint(100, 999):03d}-{rng.randint(10, 99):02d}-{rng.randint(1000, 9999):04d}"
+
+    if any(k in key for k in ("dob", "birth_date", "birthdate")):
+        year = rng.randint(1950, 2005)
+        month = rng.randint(1, 12)
+        day = rng.randint(1, 28)
+        return f"{year:04d}-{month:02d}-{day:02d}"
+
+    if any(k in key for k in ("note", "notes", "admission", "prognosis", "summary")):
+        return "[SYNTHESIZED OBSERVATION: Vital signs within standard synthetic baseline.]"
+
+    return f"[SYNTHETIC {field_name.upper()}]"
 
 
 def _extract_field_name(adapter: FormatAdapter, node: Any) -> str:
@@ -247,14 +310,11 @@ def deep_redact_subtree(adapter: FormatAdapter, subtree_root: Any) -> None:
 
 
 def synthesize_subtree(adapter: FormatAdapter, subtree_root: Any) -> None:
-    """Walk every leaf in *subtree_root* and replace it with synthetic data.
-
-    Field-name heuristics from ``SYNTHETIC_VALUES`` are used; unknown fields
-    fall back to ``DEFAULT_SYNTHETIC``.  Container structure is preserved.
-    """
+    """Walk every leaf in *subtree_root* and replace it with realistic, dynamic synthetic data."""
     for node in adapter.iter_subtree(subtree_root):
         if not adapter.is_leaf_node(node):
             continue
         key = _extract_field_name(adapter, node)
-        synthetic = SYNTHETIC_VALUES.get(key, DEFAULT_SYNTHETIC)
+        orig_val = adapter.get_value(node)
+        synthetic = generate_synthetic_value(key, orig_val)
         adapter.set_value(node, synthetic)

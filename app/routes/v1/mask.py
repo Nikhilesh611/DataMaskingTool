@@ -102,6 +102,16 @@ async def _resolve_role_multi_tenant(
         )
         p_res = await db.execute(stmt)
         p_row = p_res.scalar_one_or_none()
+        if not p_row:
+            stmt_fallback = (
+                select(MaskingPolicy)
+                .where(MaskingPolicy.tenant_id == tenant.tenant_id)
+                .where(MaskingPolicy.is_active.is_(True))
+                .order_by(MaskingPolicy.created_at.desc())
+            )
+            p_fallback = await db.execute(stmt_fallback)
+            p_row = p_fallback.scalars().first()
+
         if p_row:
             tenant_policy = load_policy_from_string(p_row.policy_yaml)
             if tenant_policy and internal_role not in tenant_policy.roles and tenant_policy.roles:

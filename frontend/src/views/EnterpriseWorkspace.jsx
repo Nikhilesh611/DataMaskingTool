@@ -22,26 +22,8 @@ export default function EnterpriseWorkspace() {
 
   // Policies state
   const [policies, setPolicies] = useState([]);
-  const [editingPolicyName, setEditingPolicyName] = useState('analyst');
-  const [editingPolicyYaml, setEditingPolicyYaml] = useState(`version: "3.0"
-record_root: "$"
-roles:
-  analyst: {}
-rules:
-  - selector: "$..patient_id"
-    technique: "pseudonymize"
-    consistent: true
-  - selector: "$..ssn"
-    technique: "suppress"
-  - selector: "$..email"
-    technique: "pseudonymize"
-    consistent: true
-  - selector: "$..salary"
-    technique: "redact"
-  - selector: "$..credit_card"
-    technique: "mask_pattern"
-    pattern: "****-****-****-{last4}"
-`);
+  const [editingPolicyName, setEditingPolicyName] = useState('');
+  const [editingPolicyYaml, setEditingPolicyYaml] = useState('');
   const [policySaveStatus, setPolicySaveStatus] = useState('');
 
   // Audit state
@@ -76,8 +58,12 @@ rules:
         const polData = await polRes.json();
         const pList = Array.isArray(polData) ? polData : [];
         setPolicies(pList);
-        if (pList.length > 0 && !newPolicyId) {
-          setNewPolicyId(pList[0].id);
+        if (pList.length > 0) {
+          if (!newPolicyId) {
+            setNewPolicyId(pList[0].id);
+          }
+          setEditingPolicyName((prev) => prev || pList[0].name);
+          setEditingPolicyYaml((prev) => prev || pList[0].policy_yaml);
         }
       }
 
@@ -192,67 +178,47 @@ rules:
   };
 
   const loadTemplate = (type) => {
-    if (type === 'healthcare') {
-      setEditingPolicyName('hipaa-analyst');
-      setEditingPolicyYaml(`version: "3.0"
-record_root: "$"
+    if (type === 'enterprise') {
+      setEditingPolicyName('Enterprise-Unified-Policy');
+      setEditingPolicyYaml(`# Enterprise Unified Multi-Role Policy
+
 roles:
-  analyst: {}
+  clinical-analyst:
+    default_fallback: drop_subtree
+  compliance-auditor:
+    default_fallback: masked
+  emergency-operator:
+    default_fallback: default_allow
+
+scopes:
+  - path: "$.patients[*].personal_info"
+    roles:
+      clinical-analyst:
+        strategy: masked
+      compliance-auditor:
+        strategy: masked
+      emergency-operator:
+        strategy: default_allow
+
+  - path: "$.patients[*].billing"
+    roles:
+      clinical-analyst:
+        strategy: drop_subtree
+      compliance-auditor:
+        strategy: masked
+      emergency-operator:
+        strategy: default_allow
+
 rules:
-  - selector: "$..patient_id"
-    technique: "pseudonymize"
-    consistent: true
   - selector: "$..ssn"
     technique: "suppress"
-  - selector: "$..email"
-    technique: "pseudonymize"
-    consistent: true
-  - selector: "$..diagnosis"
-    technique: "generalize"
-    hierarchy: "medical"
-    level: 1
-  - selector: "$..clinical_notes"
-    technique: "redact"
-  - selector: "$..billing"
-    technique: "redact"
-`);
-    } else if (type === 'financial') {
-      setEditingPolicyName('financial-analyst');
-      setEditingPolicyYaml(`version: "3.0"
-record_root: "$"
-roles:
-  analyst: {}
-rules:
-  - selector: "$..ssn"
-    technique: "suppress"
-  - selector: "$..salary"
-    technique: "redact"
   - selector: "$..credit_card"
     technique: "mask_pattern"
     pattern: "****-****-****-{last4}"
-  - selector: "$..email"
-    technique: "pseudonymize"
-    consistent: true
 `);
-    } else if (type === 'auditor') {
-      setEditingPolicyName('compliance-auditor');
-      setEditingPolicyYaml(`version: "3.0"
-record_root: "$"
-roles:
-  auditor: {}
-rules:
-  - selector: "$..ssn"
-    technique: "pseudonymize"
-    consistent: true
-  - selector: "$..credit_card"
-    technique: "mask_pattern"
-    pattern: "XXXX-XXXX-XXXX-{last4}"
-  - selector: "$..salary"
-    technique: "redact"
-  - selector: "$..email"
-    technique: "pseudonymize"
-    consistent: true
-`);
+    } else if (type === 'blank') {
+      setEditingPolicyName('');
+      setEditingPolicyYaml('');
     }
   };
 
@@ -408,14 +374,11 @@ rules:
               <div className="card-header">
                 <div style={{ fontWeight: 600 }}>Policy Editor</div>
                 <div style={{ display: 'flex', gap: '0.5rem' }}>
-                  <button type="button" className="btn btn-secondary btn-sm" onClick={() => loadTemplate('healthcare')}>
-                    HIPAA Healthcare PHI
+                  <button type="button" className="btn btn-secondary btn-sm" onClick={() => loadTemplate('enterprise')}>
+                    Enterprise Multi-Role Template
                   </button>
-                  <button type="button" className="btn btn-secondary btn-sm" onClick={() => loadTemplate('financial')}>
-                    Financial PII
-                  </button>
-                  <button type="button" className="btn btn-secondary btn-sm" onClick={() => loadTemplate('auditor')}>
-                    Compliance Auditor
+                  <button type="button" className="btn btn-secondary btn-sm" onClick={() => loadTemplate('blank')}>
+                    + New Empty Policy
                   </button>
                 </div>
               </div>
@@ -550,7 +513,7 @@ rules:
                         <label>Role in Policy</label>
                         {rolesList.length > 0 ? (
                           <select value={newInternalRole} onChange={(e) => setNewInternalRole(e.target.value)}>
-                            <option value="">-- Match Policy Name --</option>
+                            <option value="">Default (Primary Policy Role)</option>
                             {rolesList.map((r) => (
                               <option key={r} value={r}>{r}</option>
                             ))}
@@ -616,7 +579,9 @@ rules:
                                 {m.internal_role}
                               </span>
                             ) : (
-                              <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Universal / Default</span>
+                              <span className="badge" style={{ backgroundColor: 'rgba(148, 163, 184, 0.15)', color: '#94a3b8', border: '1px solid rgba(148, 163, 184, 0.3)' }}>
+                                Default Role
+                              </span>
                             )}
                           </td>
                           <td><span className="badge badge-active"><span className="badge-dot"></span>Active</span></td>
